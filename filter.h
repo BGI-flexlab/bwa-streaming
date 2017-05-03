@@ -27,6 +27,7 @@ typedef struct
 }StatisInfo;
 
 typedef struct {
+    int is_phred64;
     int is_pe;
     int n_threads;
     char *adp1;
@@ -107,7 +108,7 @@ typedef struct
 } FqInfo;
 
 typedef struct {
-    filter_opt_t *filter_opt;
+    const filter_opt_t *filter_opt;
     bseq1_t *seqs;
     int64_t n_processed;
     int is_clean;   // 0: should be filtered; 1: good

@@ -6,9 +6,10 @@
 #include <math.h>
 #include "filter.h"
 #include "ksort.h"
+#include "utils.h"
 
 //// filter step (SOAPnuke)
-static void worker0(void *data, int i, int tid)
+static void worker(void *data, int i, int tid)
 {
 	filter_worker_t *w = (filter_worker_t*)data;
 	if (!(w->filter_opt->is_pe)) {
@@ -18,6 +19,26 @@ static void worker0(void *data, int i, int tid)
         if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1/2 <=====\n", w->seqs[i<<1|0].name);
         w->is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->fqInfo);
     }
+}
+
+void soapnuke_filter(const filter_opt_t *opt,int64_t n_processed, int n, bseq1_t *seqs);
+
+void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo fqInfo[2]) {
+    extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
+    filter_worker_t w;
+    mem_pestat_t pes[4];
+    double ctime, rtime;
+    int i;
+
+    ctime = cputime(); rtime = realtime();
+    w.filter_opt = opt;
+    w.seqs = seqs;
+    w.n_processed = n_processed;
+    w.fqInfo = fqInfo; //fixme
+
+    kt_for(opt->n_threads, worker, &w, (opt->is_pe)? n>>1 : n); // generate alignment
+    if (bwa_verbose >= 3)
+        fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }
 
 int statistics_pe(bseq1_t *read1, bseq1_t *read2, filter_opt_t *opt, FqInfo *info[2])
@@ -417,6 +438,7 @@ int adapter_align(bseq1_t *read, const char *adapter, filter_opt_t *opt) {
 filter_opt_t *filter_opt_init() {
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
+    o->is_phred64 = 1;
     o->is_pe = 1;
     o->n_threads = 1;
     o->adp1 = NULL;
