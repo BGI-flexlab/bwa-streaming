@@ -93,8 +93,6 @@ typedef struct { // This struct is only used for the convenience of API.
 	int n_cigar;     // number of CIGAR operations
 	uint32_t *cigar; // CIGAR in the BAM encoding: opLen<<4|op; op to integer mapping: MIDSH=>01234
 	char *XA;        // alternative mappings
-//	int64_t MS;
-//	int64_t ME;
 
 	int score, sub, alt_sc;
 } mem_aln_t;
