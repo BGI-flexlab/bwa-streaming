@@ -125,6 +125,7 @@ void bwa_cal_sa_reg_gap(int tid, bwt_t *const bwt, int n_seqs, bwa_seq_t *seqs, 
 	gap_destroy_stack(stack);
 }
 
+//todo:  add filter function ?
 //add by zhangyong for hadoop
 void bwa_cal_sa_reg_gap2(int tid, bwt_t *const bwt, int n_seqs, bwa_seq_t *seqs, const gap_opt_t *opt)
 {

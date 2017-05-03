@@ -113,6 +113,7 @@ bwtint_t bwa_sa2pos(const bntseq_t *bns, const bwt_t *bwt, bwtint_t sapos, int r
 {
 	bwtint_t pos_f;
 	int is_rev;
+	*strand = 0; // initialise strand to 0 otherwise we could return without setting it
 	pos_f = bwt_sa(bwt, sapos); // position on the forward-reverse coordinate
 	if (pos_f < bns->l_pac && bns->l_pac < pos_f + ref_len) return (bwtint_t)-1;
 	pos_f = bns_depos(bns, pos_f, &is_rev); // position on the forward strand; this may be the first base or the last base
@@ -398,6 +399,17 @@ void bwa_print_seq(FILE *stream, bwa_seq_t *seq) {
 	}
 }
 
+static inline int get_rlen(int n_cigar, const bwa_cigar_t *cigar)
+{
+    int k, l;
+    for (k = l = 0; k < n_cigar; ++k) {
+        int op = __cigar_op(cigar[k]);
+        if (op == 0 || op == 2)
+            l += __cigar_len(cigar[k]);
+    }
+    return l;
+}
+
 void bwa_print_sam1(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, int mode, int max_top2)
 {
 	int j;
@@ -455,6 +467,18 @@ void bwa_print_sam1(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 			if (p->strand) seq_reverse(p->len, p->qual, 0); // reverse quality
 			err_printf("%s", p->qual);
 		} else err_printf("*");
+
+        if (mate && mate->type != BWA_TYPE_NO_MATCH) {
+            int64_t ms = mate->pos + 1, me = mate->pos;
+            if (mate->cigar) {
+                if (__cigar_op(mate->cigar[0]) == 3) { ms -= __cigar_len(mate->cigar[0]); }
+                if (__cigar_op(mate->cigar[mate->n_cigar - 1]) == 3) { me += __cigar_len(mate->cigar[p->n_cigar - 1])  + get_rlen(mate->n_cigar, mate->cigar); }
+            } else{
+                me += mate->len;
+            }
+            err_printf("\tMS:i:%lld", ms);
+            err_printf("\tME:i:%lld", me);
+        }
 
 		if (bwa_rg_id[0]) err_printf("\tRG:Z:%s", bwa_rg_id);
 		if (p->bc[0]) err_printf("\tBC:Z:%s", p->bc);
@@ -571,6 +595,18 @@ void bwa_print_sam2(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 			err_printf("%s", p->qual);
 		} else err_printf("*");
 
+        if (mate && mate->type != BWA_TYPE_NO_MATCH) {
+            int64_t ms = mate->pos + 1, me = mate->pos;
+            if (mate->cigar) {
+                if (__cigar_op(mate->cigar[0]) == 3) { ms -= __cigar_len(mate->cigar[0]); }
+                if (__cigar_op(mate->cigar[mate->n_cigar - 1]) == 3) { me += __cigar_len(mate->cigar[p->n_cigar - 1])  + get_rlen(mate->n_cigar, mate->cigar); }
+            } else{
+                me += mate->len;
+            }
+            err_printf("\tMS:i:%lld", ms);
+            err_printf("\tME:i:%lld", me);
+        }
+
 		if (rg_id) err_printf("\tRG:Z:%s", rg_id);
 		if (p->bc[0]) err_printf("\tBC:Z:%s", p->bc);
 		if (p->clip_len < p->full_len) err_printf("\tXC:i:%d", p->clip_len);
@@ -661,7 +697,11 @@ void bwa_sai2sam_se_core(const char *prefix, const char *fn_sa, const char *fn_f
 		exit(1);
 	}
 	err_fread_noeof(&opt, sizeof(gap_opt_t), 1, fp_sa);
-	bwa_print_sam_hdr(bns, rg_line);
+	char *hdr_line = 0;
+	if (rg_line) {
+		hdr_line = bwa_insert_header(rg_line, hdr_line);
+	}
+	bwa_print_sam_hdr(bns, hdr_line);
 	// set ks
 	ks = bwa_open_reads(opt.mode, fn_fa);
 	// core loop

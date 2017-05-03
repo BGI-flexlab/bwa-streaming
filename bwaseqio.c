@@ -9,6 +9,8 @@ KSEQ_DECLARE(gzFile)
 
 #ifdef USE_MALLOC_WRAPPERS
 #  include "malloc_wrap.h"
+#include "filter.h"
+
 #endif
 
 extern unsigned char nst_nt4_table[256];
@@ -258,7 +260,6 @@ bwa_seq_t *bwa_read_seq(bwa_seqio_t *bs, int n_needed, int *n, int mode, int tri
 		p->full_len = p->clip_len = p->len = l;
 		n_tot += p->full_len;
 		p->seq = (ubyte_t*)calloc(p->full_len, 1);
-		
 		for (i = 0; i != p->full_len; ++i)
 			p->seq[i] = nst_nt4_table[(int)seq->seq.s[i]];
 		if (seq->qual.l) { // copy quality
@@ -363,7 +364,9 @@ bwa_seq_t *bwa_read_seq_se(bwa_seqio_t *bs, int n_needed, int *n, int mode, int 
 	return seqs;
 }
 
+//todo:  add filter function ?
 //add by zhangyong2.
+//int bwa_read_seq_pe(bwa_seqio_t *bs, int n_needed, int *n, int mode, int trim_qual, bwa_seq_t *seqs[2], filter_opt_t filter_opt)
 int bwa_read_seq_pe(bwa_seqio_t *bs, int n_needed, int *n, int mode, int trim_qual, bwa_seq_t *seqs[2])
 {
 	bwa_seq_t *p;
@@ -378,7 +381,12 @@ int bwa_read_seq_pe(bwa_seqio_t *bs, int n_needed, int *n, int mode, int trim_qu
 	}
 	if (bs->is_bam) return bwa_read_bam_pe(bs, n_needed, n, is_comp, trim_qual, seqs); // l_bc has no effect for BAM input
 	n_seqs = 0;
-	seqs[0] = (bwa_seq_t*)calloc(n_needed, sizeof(bwa_seq_t));
+
+    //todo	filter(seqs);
+//    bseq1_t *reads = bseq_read2(n_needed*100, &n_seqs, seq, 1, is_64);
+//    soapnuke_filter(p, filter_opt, 0);
+
+    seqs[0] = (bwa_seq_t*)calloc(n_needed, sizeof(bwa_seq_t));
 	seqs[1] = (bwa_seq_t*)calloc(n_needed, sizeof(bwa_seq_t));
 	while ((l = kseq_read_gaea(seq)) >= 0) {
 		if ((mode & BWA_MODE_CFY) && (seq->comment.l != 0)) {
@@ -448,6 +456,7 @@ int bwa_read_seq_pe(bwa_seqio_t *bs, int n_needed, int *n, int mode, int trim_qu
 		free(seqs[1]);
 		return 0;
 	}
+
 	fprintf(stderr, "read %d reads\n", n_seqs);
 	return n_seqs;
 }

@@ -1,17 +1,19 @@
 #include <zlib.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <ctype.h>
 #include <math.h>
+#include <getopt.h>
 #include "bwa.h"
 #include "bwamem.h"
 #include "kvec.h"
 #include "utils.h"
+#include "bntseq.h"
 #include "kseq.h"
-#include "utils.h"
 #include "bwtalnpe.h"
+#include "filter.h"
 
 KSEQ_DECLARE(gzFile)
 
@@ -20,101 +22,91 @@ extern unsigned char nst_nt4_table[256];
 void *kopen(const char *fn, int *_fd);
 int kclose(void *a);
 
-/*************************************************/
+/*************************************/
 int rg_number = -1;
 smaple_list **sl = NULL;
 
-/* by zhangyong for multi defined, zhangyong will work on the updates of this part.
-char *bwa_escape(char *s)
-{
-	char *p, *q;
-	for (p = q = s; *p; ++p) {
-		if (*p == '\\') {
-			++p;
-			if (*p == 't') *q++ = '\t';
-			else if (*p == 'n') *q++ = '\n';
-			else if (*p == 'r') *q++ = '\r';
-			else if (*p == '\\') *q++ = '\\';
-		} else *q++ = *p;
-	}
-	*q = '\0';
-	return s;
-}
+void kt_pipeline(int n_threads, void *(*func)(void*, int, void*), void *shared_data, int n_steps);
 
-int split_sample_list(char str[],char *delim, smaple_list *sl[])
+typedef struct {
+	kseq_t *ks, *ks2;
+	mem_opt_t *opt;
+	mem_pestat_t *pes0;
+	int64_t n_processed;
+	int copy_comment, actual_chunk_size;
+	bwaidx_t *idx;
+} ktp_aux_t;
+
+typedef struct {
+	ktp_aux_t *aux;
+	int n_seqs;
+	bseq1_t *seqs;
+    FqInfo *filterInfo;
+} ktp_data_t;
+
+static void *process(void *shared, int step, void *_data)
 {
-	char *token[2];
-	int i = 0, id;
-	while(*str)
-	{
-		token[i] = str;
-		if(i == 2) 
-			break;
-		while(*str != *delim && *str != '\0')
-		{
-			str++;
+	ktp_aux_t *aux = (ktp_aux_t*)shared;
+	ktp_data_t *data = (ktp_data_t*)_data;
+	int i;
+	if (step == 0) {
+		ktp_data_t *ret;
+		int64_t size = 0;
+		ret = calloc(1, sizeof(ktp_data_t));
+//		ret->seqs = bseq_read(aux->actual_chunk_size, &ret->n_seqs, aux->ks, aux->ks2);
+		int mem_f_pe = aux->opt->flag & MEM_F_PE ;
+		ret->seqs = bseq_read2(aux->actual_chunk_size, &ret->n_seqs, aux->ks, mem_f_pe, aux->opt->is_64);
+		if (ret->seqs == 0) {
+			free(ret);
+			return 0;
 		}
-		*str = '\0';
-		str++;
-		i++;
-	}
 
-	if(token[0] != NULL)
-	{
-		id = atoi(token[0]);
-	} else {
-		printf("null token!\n");
-		return -1;
-	}
-	sl[id] = (smaple_list *) malloc(1*sizeof(smaple_list));
-	sl[id]->id = id;
-	if(token[1] != NULL)
-	{
-		sl[id]->rg = strdup(token[1]);
-		
-		char *p, *q, *r;
-		bwa_escape(sl[id]->rg);
-		p = strstr(sl[id]->rg, "\tID:");
-		if (p == 0) {return -1;}
-		p += 4;
-		for (q = p; *q && *q != '\t' && *q != '\n'; ++q);
-		sl[id]->rg_id = calloc(q - p + 1, 1);
-		for (q = p, r = sl[id]->rg_id; *q && *q != '\t' && *q != '\n'; ++q)
-			*r++ = *q;
-	} else {
-		return -1;
-	}
-	return i;
-}
-
-int read_sample_list(char * file, smaple_list *sl[]) 
-{
-	int list_fd;
-	
-	list_fd = open(file, O_RDONLY);
-	if(list_fd < 0)
-	{
-		return -1;
-	}
-	char line[4096];
-	int len;
-	int i = 0;
-	while((len = Readline(list_fd, line, 4096)) > 0)
-	{
-		if(len == 1)
-			continue;
-		if(split_sample_list(line, "\t", sl) == -1)
-		{
-			fprintf(stderr, "wrong line:%s\n", line);
-			return -1;
+		if (!aux->copy_comment)
+			for (i = 0; i < ret->n_seqs; ++i) {
+				free(ret->seqs[i].comment);
+				ret->seqs[i].comment = 0;
+			}
+		for (i = 0; i < ret->n_seqs; ++i) size += ret->seqs[i].l_seq;
+		if (bwa_verbose >= 3)
+			fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, ret->n_seqs, (long)size);
+		return ret;
+	} else if (step == 1) {
+		const mem_opt_t *opt = aux->opt;
+		const bwaidx_t *idx = aux->idx;
+		if (opt->flag & MEM_F_SMARTPE) {
+			bseq1_t *sep[2];
+			int n_sep[2];
+			mem_opt_t tmp_opt = *opt;
+			bseq_classify(data->n_seqs, data->seqs, n_sep, sep);
+			if (bwa_verbose >= 3)
+				fprintf(stderr, "[M::%s] %d single-end sequences; %d paired-end sequences\n", __func__, n_sep[0], n_sep[1]);
+			if (n_sep[0]) {
+				tmp_opt.flag &= ~MEM_F_PE;
+				mem_process_seqs(&tmp_opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, n_sep[0], sep[0], 0);
+				for (i = 0; i < n_sep[0]; ++i)
+					data->seqs[sep[0][i].id].sam = sep[0][i].sam;
+			}
+			if (n_sep[1]) {
+				tmp_opt.flag |= MEM_F_PE;
+				mem_process_seqs(&tmp_opt, idx->bwt, idx->bns, idx->pac, aux->n_processed + n_sep[0], n_sep[1], sep[1], aux->pes0);
+				for (i = 0; i < n_sep[1]; ++i)
+					data->seqs[sep[1][i].id].sam = sep[1][i].sam;
+			}
+			free(sep[0]); free(sep[1]);
+		} else mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, aux->n_processed, data->n_seqs, data->seqs, aux->pes0);
+		aux->n_processed += data->n_seqs;
+		return data;
+	} else if (step == 2) {
+		for (i = 0; i < data->n_seqs; ++i) {
+			if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
+			free(data->seqs[i].name); free(data->seqs[i].comment);
+			free(data->seqs[i].seq); free(data->seqs[i].qual); free(data->seqs[i].sam);
 		}
-		i++;
+		free(data->seqs); free(data);
+		return 0;
 	}
-	
-	close(list_fd);
-	return i;
+	return 0;
 }
-*************************************************/
 
 static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 {
@@ -135,26 +127,81 @@ static void update_a(mem_opt_t *opt, const mem_opt_t *opt0)
 int main_mem(int argc, char *argv[])
 {
 	mem_opt_t *opt, opt0;
-	int fd, i, c, n, copy_comment = 0;
+	int fd, fd2, i, c, ignore_alt = 0, no_mt_io = 0;
+	int fixed_chunk_size = -1;
 	gzFile fp, fp2 = 0;
-	kseq_t *ks, *ks2 = 0;
-	bseq1_t *seqs;
-	bwaidx_t *idx;
-	char *p, *rg_line = 0;
+	char *p, *rg_line = 0, *hdr_line = 0;
 	const char *mode = 0;
 	void *ko = 0, *ko2 = 0;
-	int64_t n_processed = 0;
-	mem_pestat_t pes[4], *pes0 = 0;
+	mem_pestat_t pes[4];
+	ktp_aux_t aux;
 
+	filter_opt_t *filter_opt = filter_opt_init();
+
+	memset(&aux, 0, sizeof(ktp_aux_t));
 	memset(pes, 0, 4 * sizeof(mem_pestat_t));
 	for (i = 0; i < 4; ++i) pes[i].failed = 1;
 
-	opt = mem_opt_init();
+	aux.opt = opt = mem_opt_init();
 	opt->flag |= MEM_F_PE; // add by lisk
-	opt->is_64 = 0; // add by llisk
+	opt->is_64 = 0; // add by lisk
 	memset(&opt0, 0, sizeof(mem_opt_t));
-	while ((c = getopt(argc, argv, "epaiFMCSPHYk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:X:G:h:")) >= 0) {//add args X by lisk
-		if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
+
+	static struct option long_options[] = {
+			{"adapter1", required_argument, 0, 0},
+			{"adapter2", required_argument, 0, 0},
+			{"misMatch", required_argument, 0, 0},
+			{"matchRatio", required_argument, 0, 0},
+			{"cutAdaptor", required_argument, 0, 0},
+			{"lowQual", required_argument, 0, 0},
+			{"qualRate", required_argument, 0, 0},
+			{"nRate", required_argument, 0, 0},
+			{"mean", required_argument, 0, 0},
+			{"trim", required_argument, 0, 0},
+			{"minLen", required_argument, 0, 0},
+			{"small", no_argument, 0, 0},
+			{"tile", required_argument, 0, 0},
+			{"polyA", required_argument, 0, 0},
+			{"polyAType", required_argument, 0, 0},
+			{0, 0, 0, 0}
+	};
+
+    int option_index = 0;
+    while(1){
+        c = getopt_long(argc, argv, "1paiMCSPVYjk:c:v:s:r:t:R:A:B:O:E:U:w:L:d:T:Q:D:m:I:N:W:x:G:h:y:K:X:l:H:", long_options, &option_index);
+        if (c == -1)
+            break;
+
+        if(c == 0) {
+            if(strcmp(long_options[option_index].name, "adapter1")==0) filter_opt->adp1 = optarg;
+            else if(strcmp(long_options[option_index].name, "adapter2")==0) filter_opt->adp2 = optarg;
+            else if(strcmp(long_options[option_index].name, "misMatch")==0) filter_opt->misMatch = atoi(optarg);
+            else if(strcmp(long_options[option_index].name, "matchRatio")==0) filter_opt->matchRatio = (float) atof(optarg);
+            else if(strcmp(long_options[option_index].name, "cutAdaptor")==0) filter_opt->cutAdapter = 1;
+            else if(strcmp(long_options[option_index].name, "lowQual")==0) filter_opt->lowQual = atoi(optarg);
+            else if(strcmp(long_options[option_index].name, "qualRate")==0) filter_opt->qualRate = (float) atof(optarg);
+            else if(strcmp(long_options[option_index].name, "nRate")==0) filter_opt->nRate = (float) atof(optarg);
+            else if(strcmp(long_options[option_index].name, "mean")==0) filter_opt->mean = atoi(optarg);
+            else if(strcmp(long_options[option_index].name, "minLen")==0) filter_opt->min_read_len = atoi(optarg);
+            else if(strcmp(long_options[option_index].name, "small")==0) filter_opt->small = atoi(optarg);
+            else if(strcmp(long_options[option_index].name, "tile")==0) filter_opt->tile = optarg;
+            else if(strcmp(long_options[option_index].name, "polyA")==0) filter_opt->polyA = (float) atof(optarg);
+            else if(strcmp(long_options[option_index].name, "polyAType")==0) filter_opt->polyAType = atoi(optarg);
+            else if(strcmp(long_options[option_index].name, "trim")==0){
+                int index = 1;
+                char *trim_opt = optarg;
+                filter_opt->trim[0] = atoi(trim_opt);
+                while (*trim_opt) {
+                    if(*trim_opt == ',') {
+                        filter_opt->trim[index++] = atoi(trim_opt+1);
+                        if(index>=4) break;
+                    }
+                    trim_opt++;
+                }
+            }
+        }
+		else if (c == 'k') opt->min_seed_len = atoi(optarg), opt0.min_seed_len = 1;
+		else if (c == '1') no_mt_io = 1;
 		else if (c == 'x') mode = optarg;
 		else if (c == 'X') opt->sample_list= strdup(optarg); //add by lisk
 		else if (c == 'i') opt->is_64 = 1; // add by lisk
@@ -166,25 +213,33 @@ int main_mem(int argc, char *argv[])
 		else if (c == 't') opt->n_threads = atoi(optarg), opt->n_threads = opt->n_threads > 1? opt->n_threads : 1;
 		else if (c == 'P') opt->flag |= MEM_F_NOPAIRING;
 		else if (c == 'a') opt->flag |= MEM_F_ALL;
-		//else if (c == 'p') opt->flag |= MEM_F_PE;
-		else if (c == 'p') opt->flag &= 0xFFFFFFFD; // add by lisk
+		//else if (c == 'p') opt->flag |= MEM_F_PE | MEM_F_SMARTPE;
+		else if (c == 'p') opt->flag &= 0xFFFFFFFD; // add by lisk   fixme
 		else if (c == 'M') opt->flag |= MEM_F_NO_MULTI;
 		else if (c == 'S') opt->flag |= MEM_F_NO_RESCUE;
-		else if (c == 'e') opt->flag |= MEM_F_SELF_OVLP;
-		else if (c == 'F') opt->flag |= MEM_F_ALN_REG;
 		else if (c == 'Y') opt->flag |= MEM_F_SOFTCLIP;
+		else if (c == 'V') opt->flag |= MEM_F_REF_HDR;
 		else if (c == 'c') opt->max_occ = atoi(optarg), opt0.max_occ = 1;
 		else if (c == 'd') opt->zdrop = atoi(optarg), opt0.zdrop = 1;
 		else if (c == 'v') bwa_verbose = atoi(optarg);
+		else if (c == 'j') ignore_alt = 1;
 		else if (c == 'r') opt->split_factor = atof(optarg), opt0.split_factor = 1.;
 		else if (c == 'D') opt->drop_ratio = atof(optarg), opt0.drop_ratio = 1.;
 		else if (c == 'm') opt->max_matesw = atoi(optarg), opt0.max_matesw = 1;
-		else if (c == 'h') opt->max_hits = atoi(optarg), opt0.max_hits = 1;
 		else if (c == 's') opt->split_width = atoi(optarg), opt0.split_width = 1;
 		else if (c == 'G') opt->max_chain_gap = atoi(optarg), opt0.max_chain_gap = 1;
 		else if (c == 'N') opt->max_chain_extend = atoi(optarg), opt0.max_chain_extend = 1;
 		else if (c == 'W') opt->min_chain_weight = atoi(optarg), opt0.min_chain_weight = 1;
-		else if (c == 'C') copy_comment = 1;
+		else if (c == 'y') opt->max_mem_intv = atol(optarg), opt0.max_mem_intv = 1;
+		else if (c == 'C') aux.copy_comment = 1;
+		else if (c == 'K') fixed_chunk_size = atoi(optarg);
+		else if (c == 'l') opt->mask_level = atof(optarg);
+		else if (c == 'h') {
+			opt0.max_XA_hits = opt0.max_XA_hits_alt = 1;
+			opt->max_XA_hits = opt->max_XA_hits_alt = strtol(optarg, &p, 10);
+			if (*p != 0 && ispunct(*p) && isdigit(p[1]))
+				opt->max_XA_hits_alt = strtol(p+1, &p, 10);
+		}
 		else if (c == 'Q') {
 			opt0.mapQ_coef_len = 1;
 			opt->mapQ_coef_len = atoi(optarg);
@@ -206,8 +261,24 @@ int main_mem(int argc, char *argv[])
 				opt->pen_clip3 = strtol(p+1, &p, 10);
 		} else if (c == 'R') {
 			if ((rg_line = bwa_set_rg(optarg)) == 0) return 1; // FIXME: memory leak
+		} else if (c == 'H') {
+			if (optarg[0] != '@') {
+				FILE *fp;
+				if ((fp = fopen(optarg, "r")) != 0) {
+					char *buf;
+					buf = calloc(1, 0x10000);
+					while (fgets(buf, 0xffff, fp)) {
+						i = strlen(buf);
+						assert(buf[i-1] == '\n'); // a long line
+						buf[i-1] = 0;
+						hdr_line = bwa_insert_header(buf, hdr_line);
+					}
+					free(buf);
+					fclose(fp);
+				}
+			} else hdr_line = bwa_insert_header(optarg, hdr_line);
 		} else if (c == 'I') { // specify the insert size distribution
-			pes0 = pes;
+			aux.pes0 = pes;
 			pes[1].failed = 0;
 			pes[1].avg = strtod(optarg, &p);
 			pes[1].std = pes[1].avg * .1;
@@ -226,6 +297,12 @@ int main_mem(int argc, char *argv[])
 		}
 		else return 1;
 	}
+
+	if (rg_line) {
+		hdr_line = bwa_insert_header(rg_line, hdr_line);
+		free(rg_line);
+	}
+
 	if (opt->n_threads < 1) opt->n_threads = 1;
 	if (optind + 1 >= argc || optind + 3 < argc) {
 		fprintf(stderr, "\n");
@@ -236,6 +313,7 @@ int main_mem(int argc, char *argv[])
 		fprintf(stderr, "       -w INT        band width for banded alignment [%d]\n", opt->w);
 		fprintf(stderr, "       -d INT        off-diagonal X-dropoff [%d]\n", opt->zdrop);
 		fprintf(stderr, "       -r FLOAT      look for internal seeds inside a seed longer than {-k} * FLOAT [%g]\n", opt->split_factor);
+		fprintf(stderr, "       -y INT        seed occurrence for the 3rd round seeding [%ld]\n", (long)opt->max_mem_intv);
 //		fprintf(stderr, "       -s INT        look for internal seeds inside a seed with less than INT occ [%d]\n", opt->split_width);
 		fprintf(stderr, "       -c INT        skip seeds with more than INT occurrences [%d]\n", opt->max_occ);
 		fprintf(stderr, "       -D FLOAT      drop chains shorter than FLOAT fraction of the longest overlapping chain [%.2f]\n", opt->drop_ratio);
@@ -243,26 +321,31 @@ int main_mem(int argc, char *argv[])
 		fprintf(stderr, "       -m INT        perform at most INT rounds of mate rescues for each read [%d]\n", opt->max_matesw);
 		fprintf(stderr, "       -S            skip mate rescue\n");
 		fprintf(stderr, "       -P            skip pairing; mate rescue performed unless -S also in use\n");
-		fprintf(stderr, "       -e            discard full-length exact matches\n");
+		fprintf(stderr, "\nScoring options:\n\n");
 		fprintf(stderr, "       -A INT        score for a sequence match, which scales options -TdBOELU unless overridden [%d]\n", opt->a);
 		fprintf(stderr, "       -B INT        penalty for a mismatch [%d]\n", opt->b);
 		fprintf(stderr, "       -O INT[,INT]  gap open penalties for deletions and insertions [%d,%d]\n", opt->o_del, opt->o_ins);
 		fprintf(stderr, "       -E INT[,INT]  gap extension penalty; a gap of size k cost '{-O} + {-E}*k' [%d,%d]\n", opt->e_del, opt->e_ins);
 		fprintf(stderr, "       -L INT[,INT]  penalty for 5'- and 3'-end clipping [%d,%d]\n", opt->pen_clip5, opt->pen_clip3);
-		fprintf(stderr, "       -U INT        penalty for an unpaired read pair [%d]\n", opt->pen_unpaired);
+		fprintf(stderr, "       -U INT        penalty for an unpaired read pair [%d]\n\n", opt->pen_unpaired);
 		fprintf(stderr, "       -x STR        read type. Setting -x changes multiple parameters unless overriden [null]\n");
-		fprintf(stderr, "                     pacbio: -k17 -W40 -r10 -A2 -B5 -O2 -E1 -L0\n");
-		fprintf(stderr, "                     pbread: -k13 -W40 -c1000 -r10 -A2 -B5 -O2 -E1 -N25 -FeaD.001\n");
+		fprintf(stderr, "                     pacbio: -k17 -W40 -r10 -A1 -B1 -O1 -E1 -L0  (PacBio reads to ref)\n");
+		fprintf(stderr, "                     ont2d: -k14 -W20 -r10 -A1 -B1 -O1 -E1 -L0  (Oxford Nanopore 2D-reads to ref)\n");
+		fprintf(stderr, "                     intractg: -B9 -O16 -L5  (intra-species contigs to ref)\n");
 		fprintf(stderr, "\nInput/output options:\n\n");
+		//	fprintf(stderr, "       -p            smart pairing (ignoring in2.fq)\n");
 		fprintf(stderr, "       -p            single read\n");
 		fprintf(stderr, "		-X STR		  multi-sample list\n");
 		fprintf(stderr, "       -R STR        read group header line such as '@RG\\tID:foo\\tSM:bar' [null]\n");
+		fprintf(stderr, "       -H STR/FILE   insert STR to header if it starts with @; or insert lines in FILE [null]\n");
+		fprintf(stderr, "       -j            treat ALT contigs as part of the primary assembly (i.e. ignore <idxbase>.alt file)\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "       -v INT        verbose level: 1=error, 2=warning, 3=message, 4+=debugging [%d]\n", bwa_verbose);
 		fprintf(stderr, "       -T INT        minimum score to output [%d]\n", opt->T);
-		fprintf(stderr, "       -h INT        if there are <INT hits with score >80%% of the max score, output all in XA [%d]\n", opt->max_hits);
+		fprintf(stderr, "       -h INT[,INT]  if there are <INT hits with score >80%% of the max score, output all in XA [%d,%d]\n", opt->max_XA_hits, opt->max_XA_hits_alt);
 		fprintf(stderr, "       -a            output all alignments for SE or unpaired PE\n");
 		fprintf(stderr, "       -C            append FASTA/FASTQ comment to SAM output\n");
+		fprintf(stderr, "       -V            output the reference FASTA header in the XR tag\n");
 		fprintf(stderr, "       -Y            use soft clipping for supplementary alignments\n");
 		fprintf(stderr, "       -M            mark shorter split hits as secondary\n\n");
 		fprintf(stderr, "       -i            input is illumina 1.3+ fastq format.\n");
@@ -270,6 +353,23 @@ int main_mem(int argc, char *argv[])
 		fprintf(stderr, "                     specify the mean, standard deviation (10%% of the mean if absent), max\n");
 		fprintf(stderr, "                     (4 sigma from the mean if absent) and min of the insert size distribution.\n");
 		fprintf(stderr, "                     FR orientation only. [inferred]\n");
+		fprintf(stderr, "\nFilter options:\n\n");
+		fprintf(stderr, "       --adapter1    STR    3' adapter sequence of fq1 file  [null]\n");
+		fprintf(stderr, "       --adapter2    STR    5' adapter sequence of fq2 file (only for PE reads)  [null]\n");
+		fprintf(stderr, "       --misMatch    INT    the max mismatch number when match the adapter [1]\n");
+		fprintf(stderr, "       --matchRatio  FLOAT  adapter's shortest match ratio [0.5]\n");
+		fprintf(stderr, "       --cutAdaptor         cut adaptor sequence according to --adapter1/--adapter2 [off]\n");
+		fprintf(stderr, "       --lowQual     INT    low quality threshold  [5]\n");
+		fprintf(stderr, "       --qualRate    FLOAT  low quality rate  [0.5]\n");
+		fprintf(stderr, "       --nRate       FLOAT  N rate threshold  [0.05]\n");
+		fprintf(stderr, "       --mean        FLOAT  filter reads with low average quality, (<)  [0]\n");
+		fprintf(stderr, "       --minLen      INT    min length of reads [20]\n");
+		fprintf(stderr, "       --trim        INT,INT,INT,INT\n");
+		fprintf(stderr, "                            trim some bp of the read's head and tail, they means: (read1's head and tail and read2's head and tail) [0,0,0,0]\n");
+		fprintf(stderr, "       --small              remove small insert. [off]\n");
+		fprintf(stderr, "       --tile        STR    tile number to ignore reads, such as 1101-1104,1205. [null]\n");
+		fprintf(stderr, "       --polyA       FLOAT  filter poly A, percent of A, 0 means do not filter. [0]\n");
+		fprintf(stderr, "       --polyAType   INT    filter poly A type, 0->both two reads are poly a, 1->at least one reads is poly a, then filter. [0]\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Note: Please read the man page for detailed description of the command line and options.\n");
 		fprintf(stderr, "\n");
@@ -277,24 +377,30 @@ int main_mem(int argc, char *argv[])
 		return 1;
 	}
 
+	filter_opt->is_pe = opt->flag & MEM_F_PE;
+	filter_opt->n_threads = opt->n_threads;
+
 	if (mode) {
-		if (strcmp(mode, "pacbio") == 0 || strcmp(mode, "pbref") == 0 || strcmp(mode, "pbread1") == 0 || strcmp(mode, "pbread") == 0) {
-			if (!opt0.a) opt->a = 2, opt0.a = 1;
-			update_a(opt, &opt0);
-			if (!opt0.o_del) opt->o_del = 2;
+		if (strcmp(mode, "intractg") == 0) {
+			if (!opt0.o_del) opt->o_del = 16;
+			if (!opt0.o_ins) opt->o_ins = 16;
+			if (!opt0.b) opt->b = 9;
+			if (!opt0.pen_clip5) opt->pen_clip5 = 5;
+			if (!opt0.pen_clip3) opt->pen_clip3 = 5;
+		} else if (strcmp(mode, "pacbio") == 0 || strcmp(mode, "pbref") == 0 || strcmp(mode, "ont2d") == 0) {
+			if (!opt0.o_del) opt->o_del = 1;
 			if (!opt0.e_del) opt->e_del = 1;
-			if (!opt0.o_ins) opt->o_ins = 2;
+			if (!opt0.o_ins) opt->o_ins = 1;
 			if (!opt0.e_ins) opt->e_ins = 1;
-			if (!opt0.b) opt->b = 5;
+			if (!opt0.b) opt->b = 1;
 			if (opt0.split_factor == 0.) opt->split_factor = 10.;
-			if (!opt0.min_chain_weight) opt->min_chain_weight = 40;
-			if (strcmp(mode, "pbread1") == 0 || strcmp(mode, "pbread") == 0) {
-				opt->flag |= MEM_F_ALL | MEM_F_SELF_OVLP | MEM_F_ALN_REG;
-				if (!opt0.max_occ) opt->max_occ = 1000;
-				if (!opt0.min_seed_len) opt->min_seed_len = 13;
-				if (!opt0.max_chain_extend) opt->max_chain_extend = 25;
-				if (opt0.drop_ratio == 0.) opt->drop_ratio = .001;
+			if (strcmp(mode, "ont2d") == 0) {
+				if (!opt0.min_chain_weight) opt->min_chain_weight = 20;
+				if (!opt0.min_seed_len) opt->min_seed_len = 14;
+				if (!opt0.pen_clip5) opt->pen_clip5 = 0;
+				if (!opt0.pen_clip3) opt->pen_clip3 = 0;
 			} else {
+				if (!opt0.min_chain_weight) opt->min_chain_weight = 40;
 				if (!opt0.min_seed_len) opt->min_seed_len = 17;
 				if (!opt0.pen_clip5) opt->pen_clip5 = 0;
 				if (!opt0.pen_clip3) opt->pen_clip3 = 0;
@@ -304,9 +410,16 @@ int main_mem(int argc, char *argv[])
 			return 1; // FIXME memory leak
 		}
 	} else update_a(opt, &opt0);
-//	if (opt->T < opt->min_HSP_score) opt->T = opt->min_HSP_score; // TODO: tie ->T to MEM_HSP_COEF
 	bwa_fill_scmat(opt->a, opt->b, opt->mat);
-	if ((idx = bwa_idx_load(argv[optind], BWA_IDX_ALL)) == 0) return 1; // FIXME: memory leak
+
+	aux.idx = bwa_idx_load_from_shm(argv[optind]);
+	if (aux.idx == 0) {
+		if ((aux.idx = bwa_idx_load(argv[optind], BWA_IDX_ALL)) == 0) return 1; // FIXME: memory leak
+	} else if (bwa_verbose >= 3)
+		fprintf(stderr, "[M::%s] load the bwa index from shared memory\n", __func__);
+	if (ignore_alt)
+		for (i = 0; i < aux.idx->bns->n_seqs; ++i)
+			aux.idx->bns->anns[i].is_alt = 0;
 
 	ko = kopen(argv[optind + 1], &fd);
 	if (ko == 0) {
@@ -314,12 +427,11 @@ int main_mem(int argc, char *argv[])
 		return 1;
 	}
 	fp = gzdopen(fd, "r");
-	ks = kseq_init(fp);
-	/******
+	aux.ks = kseq_init(fp);
 	if (optind + 2 < argc) {
 		if (opt->flag&MEM_F_PE) {
 			if (bwa_verbose >= 2)
-				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file will be ignored.\n", __func__);
+				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
 		} else {
 			ko2 = kopen(argv[optind + 2], &fd2);
 			if (ko2 == 0) {
@@ -327,82 +439,43 @@ int main_mem(int argc, char *argv[])
 				return 1;
 			}
 			fp2 = gzdopen(fd2, "r");
-			ks2 = kseq_init(fp2);
+			aux.ks2 = kseq_init(fp2);
 			opt->flag |= MEM_F_PE;
 		}
 	}
-	******/ //edit by lisk at 2014-10-22
-	
-	//if (!(opt->flag & MEM_F_ALN_REG))
-	//	bwa_print_sam_hdr(idx->bns, rg_line);
-
 	/*******lisk******/
-	if (!(opt->flag & MEM_F_ALN_REG)){
-		if(opt->sample_list != NULL) {
-			sl = (smaple_list**)malloc(1000*sizeof(smaple_list *));
-			int s;
-			for (s =0; s < 1000; s++){
-				sl[s] = NULL;
-			}
-			rg_number = read_sample_list(opt->sample_list, sl);
-			free(opt->sample_list);
-		}
-		if(rg_number < 0)
-			bwa_print_sam_hdr(idx->bns, rg_line);
-		else
-			bwa_print_sam_hdr2(idx->bns, sl, rg_number);
-	}
-	/*******lisk******/
-	//while ((seqs = bseq_read(opt->chunk_size * opt->n_threads, &n, ks, ks2)) != 0) {
-	int mem_f_pe = opt->flag & MEM_F_PE ;
-	while ((seqs = bseq_read2(opt->chunk_size * opt->n_threads, &n, ks,mem_f_pe,opt->is_64)) != 0) {
-		int64_t size = 0;
-		if ((opt->flag & MEM_F_PE) && (n&1) == 1) {
-			if (bwa_verbose >= 2)
-				fprintf(stderr, "[W::%s] odd number of reads in the PE mode; last read dropped\n", __func__);
-			n = n>>1<<1;
-		}
-		/****** 
-		if (!copy_comment)
-			for (i = 0; i < n; ++i) {
-				free(seqs[i].comment); seqs[i].comment = 0;
-			}
-			******/
-		for (i = 0; i < n; ++i) size += seqs[i].l_seq;
-		if (bwa_verbose >= 3)
-			fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, n, (long)size);
-		mem_process_seqs(opt, idx->bwt, idx->bns, idx->pac, n_processed, n, seqs, pes0);
-		n_processed += n;
-		for (i = 0; i < n; ++i) {
-			if (seqs[i].sam) err_fputs(seqs[i].sam, stdout);
-			free(seqs[i].comment);free(seqs[i].name);  free(seqs[i].seq); free(seqs[i].qual); free(seqs[i].sam);
-		}
-		free(seqs);
-	}
+    if(opt->sample_list != NULL) {
+        sl = (smaple_list**)malloc(1000*sizeof(smaple_list *));
+        int s;
+        for (s =0; s < 1000; s++){
+            sl[s] = NULL;
+        }
+        rg_number = read_sample_list(opt->sample_list, sl);
+        free(opt->sample_list);
+    }
+    if(rg_number < 0)
+        bwa_print_sam_hdr(aux.idx->bns, hdr_line);
+    else
+        bwa_print_sam_hdr2(aux.idx->bns, sl, rg_number);
 
+	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
+	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+	free(hdr_line);
 	free(opt);
-	bwa_idx_destroy(idx);
-	kseq_destroy(ks);
+	bwa_idx_destroy(aux.idx);
+	kseq_destroy(aux.ks);
 	err_gzclose(fp); kclose(ko);
-	if (ks2) {
-		kseq_destroy(ks2);
+	if (aux.ks2) {
+		kseq_destroy(aux.ks2);
 		err_gzclose(fp2); kclose(ko2);
-	}
-	if(sl != NULL){
-		for(i = 0 ;i < 1000;i++){
-			if(sl[i] == NULL)continue;
-			free(sl[i]->rg);
-			free(sl[i]->rg_id);
-			free(sl[i]);
-		}
-		free(sl);
 	}
 	return 0;
 }
 
 int main_fastmap(int argc, char *argv[])
 {
-	int c, i, min_iwidth = 20, min_len = 17, print_seq = 0;
+	int c, i, min_iwidth = 20, min_len = 17, print_seq = 0, min_intv = 1, max_len = INT_MAX;
+	uint64_t max_intv = 0;
 	kseq_t *seq;
 	bwtint_t k;
 	gzFile fp;
@@ -410,16 +483,26 @@ int main_fastmap(int argc, char *argv[])
 	const bwtintv_v *a;
 	bwaidx_t *idx;
 
-	while ((c = getopt(argc, argv, "w:l:p")) >= 0) {
+	while ((c = getopt(argc, argv, "w:l:pi:I:L:")) >= 0) {
 		switch (c) {
 			case 'p': print_seq = 1; break;
 			case 'w': min_iwidth = atoi(optarg); break;
 			case 'l': min_len = atoi(optarg); break;
+			case 'i': min_intv = atoi(optarg); break;
+			case 'I': max_intv = atol(optarg); break;
+			case 'L': max_len  = atoi(optarg); break;
 		    default: return 1;
 		}
 	}
 	if (optind + 1 >= argc) {
-		fprintf(stderr, "Usage: bwa fastmap [-p] [-l minLen=%d] [-w maxSaSize=%d] <idxbase> <in.fq>\n", min_len, min_iwidth);
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage:   bwa fastmap [options] <idxbase> <in.fq>\n\n");
+		fprintf(stderr, "Options: -l INT    min SMEM length to output [%d]\n", min_len);
+		fprintf(stderr, "         -w INT    max interval size to find coordiantes [%d]\n", min_iwidth);
+		fprintf(stderr, "         -i INT    min SMEM interval size [%d]\n", min_intv);
+		fprintf(stderr, "         -L INT    max MEM length [%d]\n", max_len);
+		fprintf(stderr, "         -I INT    stop if MEM is longer than -l with a size less than INT [%ld]\n", (long)max_intv);
+		fprintf(stderr, "\n");
 		return 1;
 	}
 
@@ -427,6 +510,7 @@ int main_fastmap(int argc, char *argv[])
 	seq = kseq_init(fp);
 	if ((idx = bwa_idx_load(argv[optind], BWA_IDX_BWT|BWA_IDX_BNS)) == 0) return 1;
 	itr = smem_itr_init(idx->bwt);
+	smem_config(itr, min_intv, max_len, max_intv);
 	while (kseq_read(seq) >= 0) {
 		err_printf("SQ\t%s\t%ld", seq->name.s, seq->seq.l);
 		if (print_seq) {

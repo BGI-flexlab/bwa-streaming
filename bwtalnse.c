@@ -73,10 +73,18 @@ void bwa_alnse_core(const char *prefix, const char *fn_fa, const gap_opt_t *opt,
 		rg_number = read_sample_list(sample_list_file, sl);
 		free(sample_list_file);
 	}
+
 	if(rg_number < 0)
-		bwa_print_sam_hdr(bns, rg_line);
-	else
+	{
+		char *hdr_line = 0;
+		if (rg_line) {
+			hdr_line = bwa_insert_header(rg_line, hdr_line);
+		}
+		bwa_print_sam_hdr(bns,hdr_line);
+	}
+	else{
 		bwa_print_sam_hdr2(bns, sl, rg_number);
+	}
 
 	// core loop
 	while ((seqs = bwa_read_seq_se(ks, 0x40000, &n_seqs, opt->mode, opt->trim_qual)) != 0) {

@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/lh3/bwa.svg?branch=dev)](https://travis-ci.org/lh3/bwa)
+[![Build Status](https://drone.io/github.com/lh3/bwa/status.png)](https://drone.io/github.com/lh3/bwa/latest)
 ##Getting started
 
 	git clone https://github.com/lh3/bwa.git
@@ -29,6 +31,11 @@ available at github][2]. Released packages can [be downloaded][3] at
 SourceForge. After you acquire the source code, simply use `make` to compile
 and copy the single executable `bwa` to the destination you want. The only
 dependency required to build BWA is [zlib][14].
+
+Since 0.7.11, precompiled binary for x86\_64-linux is available in [bwakit][17].
+In addition to BWA, this self-consistent package also comes with bwa-associated
+and 3rd-party tools for proper BAM-to-FASTQ conversion, mapping to ALT contigs,
+adapter triming, duplicate marking, HLA typing and associated data files.
 
 ##Seeking helps
 
@@ -63,7 +70,8 @@ do not have plan to submit it to a peer-reviewed journal in the near future.
 3. [Does BWA work on reference sequences longer than 4GB in total?](#4gb)
 4. [Why can one read in a pair has high mapping quality but the other has zero?](#pe0)
 5. [How can a BWA-backtrack alignment stands out of the end of a chromosome?](#endref)
-6. [How to map sequences to GRCh38 with ALT contigs?](#h38)
+6. [Does BWA work with ALT contigs in the GRCh38 release?](#altctg)
+7. [Can I just run BWA-MEM against GRCh38+ALT without post-processing?](#postalt)
 
 ####<a name="type"></a>1. What types of data does BWA work with?
 
@@ -72,11 +80,11 @@ algorithm and setting may vary. The following list gives the recommended
 settings:
 
 * Illumina/454/IonTorrent single-end reads longer than ~70bp or assembly
-  contigs up to a few megabases mapped to a close related reference genome:
+  contigs up to a few megabases mapped to a closely related reference genome:
 
 		bwa mem ref.fa reads.fq > aln.sam
 
-* Illumina single-end reads no longer than ~70bp:
+* Illumina single-end reads shorter than ~70bp:
 
 		bwa aln ref.fa reads.fq > reads.sai; bwa samse ref.fa reads.sai reads.fq > aln-se.sam
 
@@ -84,24 +92,21 @@ settings:
 
 		bwa mem ref.fa read1.fq read2.fq > aln-pe.sam
 
-* Illumina paired-end reads no longer than ~70bp:
+* Illumina paired-end reads shorter than ~70bp:
 
 		bwa aln ref.fa read1.fq > read1.sai; bwa aln ref.fa read2.fq > read2.sai
-		bwa samse ref.fa reads.sai reads.fq > aln-pe.sam
+		bwa sampe ref.fa read1.sai read2.sai read1.fq read2.fq > aln-pe.sam
 
-* PacBio subreads to a reference genome:
+* PacBio subreads or Oxford Nanopore reads to a reference genome:
 
 		bwa mem -x pacbio ref.fa reads.fq > aln.sam
-
-* PacBio subreads to themselves (the output is not SAM):
-
-		bwa mem -x pbread reads.fq reads.fq > overlap.pas
+		bwa mem -x ont2d ref.fa reads.fq > aln.sam
 
 BWA-MEM is recommended for query sequences longer than ~70bp for a variety of
 error rates (or sequence divergence). Generally, BWA-MEM is more tolerant with
 errors given longer query sequences as the chance of missing all seeds is small.
-As is shown above, with non-default settings, BWA-MEM works with PacBio subreads
-with a sequencing error rate as high as ~15%.
+As is shown above, with non-default settings, BWA-MEM works with Oxford Nanopore
+reads with a sequencing error rate over 20%.
 
 ####<a name="multihit"></a>2. Why does a read appear multiple times in the output SAM?
 
@@ -130,37 +135,22 @@ case, BWA-backtrack will flag the read as unmapped (0x4), but you will see
 position, CIGAR and all the tags. A similar issue may occur to BWA-SW alignment
 as well. BWA-MEM does not have this problem.
 
-####<a name="h38"></a>6. How to map sequences to GRCh38 with ALT contigs?
+####<a name="altctg"></a>6. Does BWA work with ALT contigs in the GRCh38 release?
 
-BWA-backtrack and BWA-MEM partially support mapping to a reference containing
-ALT contigs that represent alternative alleles highly divergent from the
-reference genome.
+Yes, since 0.7.11, BWA-MEM officially supports mapping to GRCh38+ALT.
+BWA-backtrack and BWA-SW don't properly support ALT mapping as of now. Please
+see [README-alt.md][18] for details. Briefly, it is recommended to use
+[bwakit][17], the binary release of BWA, for generating the reference genome
+and for mapping.
 
-	# download the K8 executable required by bwa-helper.js
-	wget http://sourceforge.net/projects/lh3/files/k8/k8-0.2.1.tar.bz2/download
-	tar -jxf k8-0.2.1.tar.bz2
+####<a name="postalt"></a>7. Can I just run BWA-MEM against GRCh38+ALT without post-processing?
 
-	# download the ALT-to-GRCh38 alignment in the SAM format
-	wget http://sourceforge.net/projects/bio-bwa/files/hs38.alt.sam.gz/download
-
-	# download the GRCh38 sequences with ALT contigs
-	wget ftp://ftp.ncbi.nlm.nih.gov/genbank/genomes/Eukaryotes/vertebrates_mammals/Homo_sapiens/GRCh38/seqs_for_alignment_pipelines/GCA_000001405.15_GRCh38_full_analysis_set.fna.gz
-
-	# index and mapping
-	bwa index -p hs38a GCA_000001405.15_GRCh38_full_analysis_set.fna.gz
-	bwa mem -h50 hs38a reads.fq | ./k8-linux bwa-helper.js genalt hs38.alt.sam.gz > out.sam
-
-Here, option `-h50` asks bwa-mem to output multiple hits in the XA tag if the
-read has 50 or fewer hits. For each SAM line containing the XA tag,
-`bwa-helper.js genalt` decodes the alignments in the XA tag, groups hits lifted
-to the same chromosomal region, adjusts mapping quality and outputs all the
-hits overlapping the reported hit. A read may be mapped to both the primary
-assembly and one or more ALT contigs all with high mapping quality.
-
-Note that this procedure assumes reads are single-end and may miss hits to
-highly repetitive regions as these hits will not be reported with option
-`-h50`. `bwa-helper.js` is a prototype implementation not recommended for
-production uses.
+If you are not interested in hits to ALT contigs, it is okay to run BWA-MEM
+without post-processing. The alignments produced this way are very close to
+alignments against GRCh38 without ALT contigs. Nonetheless, applying
+post-processing helps to reduce false mappings caused by reads from the
+diverged part of ALT contigs and also enables HLA typing. It is recommended to
+run the post-processing script.
 
 
 
@@ -180,3 +170,5 @@ production uses.
 [14]: http://zlib.net/
 [15]: https://github.com/lh3/bwa/tree/mem
 [16]: ftp://ftp.ncbi.nlm.nih.gov/genbank/genomes/Eukaryotes/vertebrates_mammals/Homo_sapiens/GRCh38/seqs_for_alignment_pipelines/
+[17]: http://sourceforge.net/projects/bio-bwa/files/bwakit/
+[18]: https://github.com/lh3/bwa/blob/master/README-alt.md
