@@ -7,6 +7,7 @@
 #include "filter.h"
 #include "ksort.h"
 #include "utils.h"
+#include "bwa.h"
 
 //// filter step (SOAPnuke)
 static void worker(void *data, int i, int tid)
@@ -17,38 +18,44 @@ static void worker(void *data, int i, int tid)
 //        w->is_clean = statistics_se(w->seqs[i<<1|0],w->seqs[i<<1|1], w->filter_opt, w->aux[tid]);
     } else{
         if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1/2 <=====\n", w->seqs[i<<1|0].name);
-        w->is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->fqInfo);
+        w->is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->fq_info);
+        if (bwa_verbose >= 4) printf("=====> Processing read filter stat: '%d' <=====\n", w->is_clean);
     }
 }
 
-void soapnuke_filter(const filter_opt_t *opt,int64_t n_processed, int n, bseq1_t *seqs);
-
-void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo fqInfo[2]) {
+void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info[2]) {
     extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
     filter_worker_t w;
-    mem_pestat_t pes[4];
     double ctime, rtime;
-    int i;
 
     ctime = cputime(); rtime = realtime();
     w.filter_opt = opt;
     w.seqs = seqs;
     w.n_processed = n_processed;
-    w.fqInfo = fqInfo; //fixme
+    w.fq_info[0] = fq_info[0];  //fixme
+    w.fq_info[1] = fq_info[1];
 
     kt_for(opt->n_threads, worker, &w, (opt->is_pe)? n>>1 : n); // generate alignment
     if (bwa_verbose >= 3)
         fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }
 
-int statistics_pe(bseq1_t *read1, bseq1_t *read2, filter_opt_t *opt, FqInfo *info[2])
+int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInfo *info[2])
 {
+//    info[0]->total_short_length_n++;
+//    return 0;
     StatisInfo si1, si2;
+    memset(&si1, 0, sizeof(StatisInfo));
+    memset(&si2, 0, sizeof(StatisInfo));
+
     int trim_tail1 = 0;
     int trim_tail2 = 0;
 
     int index1 = adapter_align(read1, opt->adp1, opt);
     int index2 = adapter_align(read2, opt->adp2, opt);
+
+//    printf("index1 %d\n", index1);
+//    printf("index2 %d\n", index2);
 
     if(index1 == -2){
         si1.hasAdpt = 1;
@@ -70,18 +77,6 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, filter_opt_t *opt, FqInfo *inf
     //fq2
     seq_stat(read2, opt, opt->trim[2], trim_tail2, info[1], &si2);
 
-    // filter short length read
-    if (read1->l_seq < opt->min_read_len || read2->l_seq < opt->min_read_len){
-        if(read1->l_seq < opt->min_read_len){
-            info[0]->short_length_n++;
-        }
-        if(read2->l_seq < opt->min_read_len){
-            info[1]->short_length_n++;
-        }
-        info[0]->total_short_length_n++;
-        return 0;
-    }
-
     // filter adapter read
     if(si1.hasAdpt || si2.hasAdpt){
         if (si1.hasAdpt){
@@ -91,6 +86,20 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, filter_opt_t *opt, FqInfo *inf
             info[1]->adapterNum++;
         }
         info[0]->totalAdapterNum++;
+        return 0;
+    }
+
+//    printf("no adapter\n");
+
+    // filter short length read
+    if (read1->l_seq < opt->min_read_len || read2->l_seq < opt->min_read_len){
+        if(read1->l_seq < opt->min_read_len){
+            info[0]->short_length_n++;
+        }
+        if(read2->l_seq < opt->min_read_len){
+            info[1]->short_length_n++;
+        }
+        info[0]->total_short_length_n++;
         return 0;
     }
 
@@ -208,7 +217,7 @@ void calculate_base_distribution(bseq1_t *read, FqInfo *info) {
     }
 }
 
-void seq_stat(bseq1_t *read, filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si) {
+void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si) {
     int qual;
 
     info->rawTotalReadNum ++;
@@ -221,6 +230,8 @@ void seq_stat(bseq1_t *read, filter_opt_t *opt, int head_trim_n, int tail_trim_n
 
     int right = read->l_seq - tail_trim_n;
     int sumQual = 0;
+
+    printf("qual: %s\n", read->qual);
 
     for (int i=0; i<read->l_seq; ++i)
     {
@@ -269,7 +280,7 @@ void seq_stat(bseq1_t *read, filter_opt_t *opt, int head_trim_n, int tail_trim_n
             default:break;
         }
 
-        qual = read->qual[i];
+        qual = read->qual[i] - 33;
 
         if (qual > MAX_QUALITY)
         {
@@ -354,6 +365,8 @@ void seq_stat(bseq1_t *read, filter_opt_t *opt, int head_trim_n, int tail_trim_n
     {
         si->isPolyA = (1.0 * si->a / read->l_seq) >= (opt->polyA - 1E-6);
     }
+
+    printf("sumQuality %d\n", si->sumQuality);
 }
 
 //int has_adapter();  todo adapterList 情况
@@ -371,13 +384,14 @@ void seq_stat(bseq1_t *read, filter_opt_t *opt, int head_trim_n, int tail_trim_n
 //}
 
 // -1: no adapter  -2: filter adapter due to the adapter is too long  >0: adapter index to trim
-int adapter_align(bseq1_t *read, const char *adapter, filter_opt_t *opt) {
+int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
     int find = -1;
     int adptLen = (int) strlen(adapter);
     int minMatchLen = (int) ceilf(adptLen * opt->matchRatio);
     int a1 = adptLen - minMatchLen;
     int r1 = 0;
     int len, mis;
+    return -1; //fixme
 
     int right = read->l_seq - minMatchLen;
 
@@ -438,7 +452,7 @@ int adapter_align(bseq1_t *read, const char *adapter, filter_opt_t *opt) {
 filter_opt_t *filter_opt_init() {
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
-    o->is_phred64 = 1;
+    o->is_phred64 = 0;
     o->is_pe = 1;
     o->n_threads = 1;
     o->adp1 = NULL;
@@ -458,5 +472,15 @@ filter_opt_t *filter_opt_init() {
     for(int i=0; i < 4; i++){
         o->trim[i] = 0;
     }
+    return o;
+}
+
+StatisInfo *StatisInfo_init(){
+    StatisInfo *o;
+    o = calloc(1, sizeof(StatisInfo));
+    o->hasAdpt = 0;
+    o->sumQuality = 0;
+    o->lowQual = 0;
+    o->isLowQual = 0;
     return o;
 }

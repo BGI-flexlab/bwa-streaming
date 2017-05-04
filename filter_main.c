@@ -6,6 +6,7 @@
 #include "ksort.h"
 #include "utils.h"
 #include "kseq.h"
+#include "bwa.h"
 
 KSEQ_DECLARE(gzFile)
 
@@ -25,13 +26,13 @@ typedef struct {
     const filter_opt_t *opt;
     int64_t n_processed;
     int copy_comment, actual_chunk_size;
+    FqInfo *fq_info;
 } ktp_aux_t;
 
 typedef struct {
     ktp_aux_t *aux;
     int n_seqs;
     bseq1_t *seqs;
-    FqInfo *filterInfo;
 } ktp_data_t;
 
 
@@ -62,12 +63,19 @@ static void *process(void *shared, int step, void *_data)
         return ret;
     } else if (step == 1) {
         const filter_opt_t *opt = aux->opt;
-        soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, aux->);
+        soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, &(aux->fq_info));
         aux->n_processed += data->n_seqs;
         return data;
     } else if (step == 2) {
         for (i = 0; i < data->n_seqs; ++i) {
-            if (data->seqs[i].sam) err_fputs(data->seqs[i].sam, stdout);
+            err_fputc('@',stdout);
+            err_fputs(data->seqs[i].name, stdout);
+            err_fputc('\n',stdout);
+            err_fputs(data->seqs[i].seq, stdout);
+            err_fputc('\n',stdout);
+            err_fputs("+\n", stdout);
+            err_fputs(data->seqs[i].qual, stdout);
+            err_fputc('\n',stdout);
             free(data->seqs[i].name); free(data->seqs[i].comment);
             free(data->seqs[i].seq); free(data->seqs[i].qual); free(data->seqs[i].sam);
         }
@@ -109,7 +117,7 @@ int main_filter(int argc, char **argv) {
 
     int option_index = 0;
     while(1) {
-        c = getopt_long(argc, argv, "pt:h:",
+        c = getopt_long(argc, argv, "pt:hv:",
                             long_options, &option_index);
         if (c == -1)
             break;
@@ -144,7 +152,7 @@ int main_filter(int argc, char **argv) {
                 }
                 break;
             case 'p':
-                filter_opt->is_pe = 1;
+                filter_opt->is_pe = 0;
                 break;
             case 't':
                 filter_opt->n_threads = atoi(optarg);
@@ -152,15 +160,20 @@ int main_filter(int argc, char **argv) {
             case 'i':
                 filter_opt->is_phred64 = 1;
                 break;
+            case 'v':
+                bwa_verbose = atoi(optarg);
+                break;
+            case 'h':
+                usage();
             default:break;
         }
     }
 
-    if (optind + 1 >= argc) {
+    if (optind + 1 > argc) {
         return usage();
     }
 
-    ko = kopen(argv[optind + 1], &fd);
+    ko = kopen(argv[optind], &fd);
     if (ko == 0) {
         if (bwa_verbose >= 1) fprintf(stderr, "[E::%s] fail to open file `%s'.\n", __func__, argv[optind + 1]);
         return 1;
@@ -168,11 +181,17 @@ int main_filter(int argc, char **argv) {
     fp = gzdopen(fd, "r");
     aux.ks = kseq_init(fp);
     aux.opt = filter_opt;
+    aux.actual_chunk_size = CHUNK_SIZE;
+    aux.fq_info = alloca(2*sizeof(FqInfo));
+//    memset(aux.fq_info, 0, 2*sizeof(FqInfo));
 
     kt_pipeline(1, process, &aux, 3);
 
-    free(filter_opt);
+//    printf("length:%lu\n", aux.fq_info->total_short_length_n);
+//    printf("cleanReadLength:%d\n", aux.fq_info->cleanReadLength);
 
+//    free(filter_opt);
+//    free(aux.fq_info);
     return 0;
 }
 
@@ -196,11 +215,11 @@ int usage() {
     fprintf(stderr, "       --tile        STR      tile number to ignore reads, such as 1101-1104,1205. [null]\n");
     fprintf(stderr, "       --polyA       FLOAT    filter poly A, percent of A, 0 means do not filter. [0]\n");
     fprintf(stderr, "       --polyAType   INT      filter poly A type, 0->both two reads are poly a, 1->at least one reads is poly a, then filter. [0]\n");
-    fprintf(stderr, "    -t,--thread      INT      filter poly A type, 0->both two reads are poly a, 1->at least one reads is poly a, then filter. [0]\n");
-    fprintf(stderr, "    -p,--is_pe       INT      filter poly A type, 0->both two reads are poly a, 1->at least one reads is poly a, then filter. [0]\n");
+    fprintf(stderr, "    -t,--thread      INT      number of threads [1]\n");
+    fprintf(stderr, "    -p,--is_se       INT      single end read [off]\n");
     fprintf(stderr, "    -i,--phred64     INT      set quality system as phred64, default is phred33 [off]\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "Note: Please read the man page for detailed description of the command line and options.\n");
     fprintf(stderr, "\n");
-    return 1;
+    exit(1);
 }

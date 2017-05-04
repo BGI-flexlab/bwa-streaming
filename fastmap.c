@@ -13,7 +13,6 @@
 #include "bntseq.h"
 #include "kseq.h"
 #include "bwtalnpe.h"
-#include "filter.h"
 
 KSEQ_DECLARE(gzFile)
 
