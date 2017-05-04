@@ -180,9 +180,9 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
 }
 
 void calculate_base_distribution(bseq1_t *read, FqInfo *info) {
-    int qual;
+    int qual, i;
 
-    for (int i=0; i<read->l_seq; ++i) {
+    for (i=0; i<read->l_seq; ++i) {
         switch (read->seq[i])
         {
             case 'A':
@@ -218,7 +218,7 @@ void calculate_base_distribution(bseq1_t *read, FqInfo *info) {
 }
 
 void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si) {
-    int qual;
+    int qual, i;
 
     info->rawTotalReadNum ++;
     info->rawTotalBaseNum += read->l_seq;
@@ -233,7 +233,7 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
 
     printf("qual: %s\n", read->qual);
 
-    for (int i=0; i<read->l_seq; ++i)
+    for (i=0; i<read->l_seq; ++i)
     {
         switch (read->seq[i])
         {
@@ -385,7 +385,7 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
 
 // -1: no adapter  -2: filter adapter due to the adapter is too long  >0: adapter index to trim
 int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
-    int find = -1;
+    int find = -1, i, c;
     int adptLen = (int) strlen(adapter);
     int minMatchLen = (int) ceilf(adptLen * opt->matchRatio);
     int a1 = adptLen - minMatchLen;
@@ -403,7 +403,7 @@ int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
         mis = 0;
         int map[MAX_LENGTH];
         map[0] = 0;
-        for (int c = 0; c < len; ++c)
+        for (c = 0; c < len; ++c)
         {
             if (adapter[a1 + c] == read->seq[r1 + c])
             {
@@ -416,7 +416,7 @@ int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
             }
         }
         int max_map = 0;
-        for (int c = 0; c <= mis; ++c)
+        for (c = 0; c <= mis; ++c)
         {
             if (map[c] > max_map)
             {
@@ -450,6 +450,7 @@ int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
 }
 
 filter_opt_t *filter_opt_init() {
+    int i;
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
     o->is_phred64 = 0;
@@ -469,7 +470,7 @@ filter_opt_t *filter_opt_init() {
     o->min_read_len = 20;
     o->polyA = 0;
     o->polyAType = 0;
-    for(int i=0; i < 4; i++){
+    for(i=0; i < 4; i++){
         o->trim[i] = 0;
     }
     return o;
