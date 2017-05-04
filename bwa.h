@@ -28,8 +28,7 @@ typedef struct {
 } bwaidx_t;
 
 typedef struct {
-	uint8_t filter;
-	int l_seq, id;
+	int l_seq, id, filter;
 	char *name, *comment, *seq, *qual, *sam;
 } bseq1_t;
 

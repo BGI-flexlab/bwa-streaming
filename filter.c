@@ -19,6 +19,8 @@ static void worker(void *data, int i, int tid)
     } else{
         if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1/2 <=====\n", w->seqs[i<<1|0].name);
         w->is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->fq_info);
+        w->seqs[i<<1|0].filter = w->is_clean;
+        w->seqs[i<<1|1].filter = w->is_clean;
         if (bwa_verbose >= 4) printf("=====> Processing read filter stat: '%d' <=====\n", w->is_clean);
     }
 }
@@ -380,7 +382,7 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
 
 // -1: no adapter  -2: filter adapter due to the adapter is too long  >0: adapter index to trim
 int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
-    int find = -1, i, c;
+    int find = -1, c;
     int adptLen = (int) strlen(adapter);
     int minMatchLen = (int) ceilf(adptLen * opt->matchRatio);
     int a1 = adptLen - minMatchLen;

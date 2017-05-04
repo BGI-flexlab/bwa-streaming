@@ -67,17 +67,47 @@ static void *process(void *shared, int step, void *_data)
         aux->n_processed += data->n_seqs;
         return data;
     } else if (step == 2) {
-        for (i = 0; i < data->n_seqs; ++i) {
-            err_fputc('@',stdout);
-            err_fputs(data->seqs[i].name, stdout);
-            err_fputc('\n',stdout);
-            err_fputs(data->seqs[i].seq, stdout);
-            err_fputc('\n',stdout);
-            err_fputs("+\n", stdout);
-            err_fputs(data->seqs[i].qual, stdout);
-            err_fputc('\n',stdout);
-            free(data->seqs[i].name); free(data->seqs[i].comment);
-            free(data->seqs[i].seq); free(data->seqs[i].qual); free(data->seqs[i].sam);
+        printf("pe: %d", aux->opt->is_pe);
+        if(aux->opt->is_pe){
+            int n = data->n_seqs>>1;
+            for (i = 0; i < n; ++i) {
+                err_fputc('@',stdout);
+                err_fputs(data->seqs[i<<1|0].name, stdout);
+                err_fputs("/1\n",stdout);
+                err_fputs(data->seqs[i<<1|0].seq, stdout);
+                err_fputc('\n',stdout);
+                err_fputs("+\n", stdout);
+                err_fputs(data->seqs[i<<1|0].qual, stdout);
+                err_fputc('\n',stdout);
+                free(data->seqs[i<<1|0].name); free(data->seqs[i<<1|0].comment);
+                free(data->seqs[i<<1|0].seq); free(data->seqs[i<<1|0].qual); free(data->seqs[i<<1|0].sam);
+
+                err_fputc('@',stdout);
+                err_fputs(data->seqs[i<<1|1].name, stdout);
+                err_fputs("/2\n",stdout);
+                err_fputs(data->seqs[i<<1|1].seq, stdout);
+                err_fputc('\n',stdout);
+                err_fputs("+\n", stdout);
+                err_fputs(data->seqs[i<<1|1].qual, stdout);
+                err_fputc('\n',stdout);
+                free(data->seqs[i<<1|1].name); free(data->seqs[i<<1|1].comment);
+                free(data->seqs[i<<1|1].seq); free(data->seqs[i<<1|1].qual); free(data->seqs[i<<1|1].sam);
+            }
+
+        } else{
+            int n = data->n_seqs;
+            for (i = 0; i < n; ++i) {
+                err_fputc('@',stdout);
+                err_fputs(data->seqs[i].name, stdout);
+                err_fputc('\n',stdout);
+                err_fputs(data->seqs[i].seq, stdout);
+                err_fputc('\n',stdout);
+                err_fputs("+\n", stdout);
+                err_fputs(data->seqs[i].qual, stdout);
+                err_fputc('\n',stdout);
+                free(data->seqs[i].name); free(data->seqs[i].comment);
+                free(data->seqs[i].seq); free(data->seqs[i].qual); free(data->seqs[i].sam);
+            }
         }
         free(data->seqs); free(data);
         return 0;
@@ -186,6 +216,7 @@ int main_filter(int argc, char **argv) {
 
     kt_pipeline(1, process, &aux, 3);
 
+//    report_print();
 //    printf("length:%lu\n", aux.fq_info->total_short_length_n);
 //    printf("cleanReadLength:%d\n", aux.fq_info->cleanReadLength);
 
