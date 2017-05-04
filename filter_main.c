@@ -67,7 +67,6 @@ static void *process(void *shared, int step, void *_data)
         aux->n_processed += data->n_seqs;
         return data;
     } else if (step == 2) {
-        printf("pe: %d", aux->opt->is_pe);
         if(aux->opt->is_pe){
             int n = data->n_seqs>>1;
             for (i = 0; i < n; ++i) {
