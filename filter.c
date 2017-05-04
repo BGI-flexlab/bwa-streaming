@@ -48,29 +48,29 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
     memset(&si1, 0, sizeof(StatisInfo));
     memset(&si2, 0, sizeof(StatisInfo));
 
-    int trim_tail1 = 0;
-    int trim_tail2 = 0;
-
-    int index1 = adapter_align(read1, opt->adp1, opt);
-    int index2 = adapter_align(read2, opt->adp2, opt);
-
-//    printf("index1 %d\n", index1);
-//    printf("index2 %d\n", index2);
-
-    if(index1 == -2){
-        si1.hasAdpt = 1;
-    } else if(index1 >= 0) {
-        int cut_adapter_len = read1->l_seq - index1;
-        trim_tail1 = cut_adapter_len > opt->trim[1] ? cut_adapter_len : opt->trim[1];
-        info->totalCutAdaptorNum++;
+    int trim_tail1 = opt->trim[1];
+    int trim_tail2 = opt->trim[3];
+    if(opt->adp1 != NULL){
+        int index1 = adapter_align(read1, opt->adp1, opt);
+        if(index1 == -2){
+            si1.hasAdpt = 1;
+        } else if(index1 >= 0) {
+            int cut_adapter_len = read1->l_seq - index1;
+            trim_tail1 = cut_adapter_len > trim_tail1 ? cut_adapter_len : trim_tail1;
+            info->totalCutAdaptorNum++;
+        }
     }
 
-    if(index2 == -2){
-        si2.hasAdpt = 1;
-    } else if(index2 >= 0){
-        int cut_adapter_len = read2->l_seq - index2;
-        trim_tail2 = cut_adapter_len > opt->trim[3] ? cut_adapter_len : opt->trim[3];
-        info2->totalCutAdaptorNum++;
+    if(opt->adp2 != NULL) {
+        int index2 = adapter_align(read2, opt->adp2, opt);
+
+        if (index2 == -2) {
+            si2.hasAdpt = 1;
+        } else if (index2 >= 0) {
+            int cut_adapter_len = read2->l_seq - index2;
+            trim_tail2 = cut_adapter_len > trim_tail2 ? cut_adapter_len : trim_tail2;
+            info2->totalCutAdaptorNum++;
+        }
     }
 
     //fq1
@@ -89,8 +89,6 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
         info->totalAdapterNum++;
         return 0;
     }
-
-//    printf("no adapter\n");
 
     // filter short length read
     if (read1->l_seq < opt->min_read_len || read2->l_seq < opt->min_read_len){
@@ -388,7 +386,7 @@ int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
     int a1 = adptLen - minMatchLen;
     int r1 = 0;
     int len, mis;
-    return -1; //fixme
+//    return -1; //fixme
 
     int right = read->l_seq - minMatchLen;
 
