@@ -23,7 +23,7 @@ static void worker(void *data, int i, int tid)
     }
 }
 
-void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info[2]) {
+void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info) {
     extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
     filter_worker_t w;
     double ctime, rtime;
@@ -32,18 +32,18 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
     w.filter_opt = opt;
     w.seqs = seqs;
     w.n_processed = n_processed;
-    w.fq_info[0] = fq_info[0];  //fixme
-    w.fq_info[1] = fq_info[1];
+    w.fq_info = fq_info;  //fixme
 
     kt_for(opt->n_threads, worker, &w, (opt->is_pe)? n>>1 : n); // generate alignment
     if (bwa_verbose >= 3)
         fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
 }
 
-int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInfo *info[2])
+int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInfo *info)
 {
 //    info[0]->total_short_length_n++;
 //    return 0;
+    FqInfo *info2 = info + 1;
     StatisInfo si1, si2;
     memset(&si1, 0, sizeof(StatisInfo));
     memset(&si2, 0, sizeof(StatisInfo));
@@ -62,6 +62,7 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
     } else if(index1 >= 0) {
         int cut_adapter_len = read1->l_seq - index1;
         trim_tail1 = cut_adapter_len > opt->trim[1] ? cut_adapter_len : opt->trim[1];
+        info->totalCutAdaptorNum++;
     }
 
     if(index2 == -2){
@@ -69,23 +70,23 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
     } else if(index2 >= 0){
         int cut_adapter_len = read2->l_seq - index2;
         trim_tail2 = cut_adapter_len > opt->trim[3] ? cut_adapter_len : opt->trim[3];
-        info[1]->totalCutAdaptorNum++;
+        info2->totalCutAdaptorNum++;
     }
 
     //fq1
-    seq_stat(read1, opt, opt->trim[0], trim_tail1, info[0], &si1);
+    seq_stat(read1, opt, opt->trim[0], trim_tail1, info, &si1);
     //fq2
-    seq_stat(read2, opt, opt->trim[2], trim_tail2, info[1], &si2);
+    seq_stat(read2, opt, opt->trim[2], trim_tail2, info2, &si2);
 
     // filter adapter read
     if(si1.hasAdpt || si2.hasAdpt){
         if (si1.hasAdpt){
-            info[0]->adapterNum++;
+            info->adapterNum++;
         }
         if (si2.hasAdpt){
-            info[1]->adapterNum++;
+            info2->adapterNum++;
         }
-        info[0]->totalAdapterNum++;
+        info->totalAdapterNum++;
         return 0;
     }
 
@@ -94,45 +95,45 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
     // filter short length read
     if (read1->l_seq < opt->min_read_len || read2->l_seq < opt->min_read_len){
         if(read1->l_seq < opt->min_read_len){
-            info[0]->short_length_n++;
+            info->short_length_n++;
         }
         if(read2->l_seq < opt->min_read_len){
-            info[1]->short_length_n++;
+            info2->short_length_n++;
         }
-        info[0]->total_short_length_n++;
+        info->total_short_length_n++;
         return 0;
     }
 
     if(si1.nExceed || si2.nExceed){
         if (si1.nExceed){
-            info[0]->nExceedNum++;
+            info->nExceedNum++;
         }
         if (si2.nExceed) {
-            info[1]->nExceedNum++;
+            info2->nExceedNum++;
         }
-        info[0]->totalNExceedNum++;
+        info->totalNExceedNum++;
         return 0;
     }
 
     if(si1.isLowQual || si2.isLowQual){
         if (si1.isLowQual){
-            info[0]->lowQualNum++;
+            info->lowQualNum++;
         }
         if (si2.isLowQual) {
-            info[1]->lowQualNum++;
+            info2->lowQualNum++;
         }
-        info[0]->totalLowQualNum++;
+        info->totalLowQualNum++;
         return 0;
     }
 
     if(si1.sumQuality < opt->mean * read1->l_seq || si2.sumQuality < opt->mean * read2->l_seq){
         if(si1.sumQuality < opt->mean * read1->l_seq){
-            info[0]->lowMeanNum++;
+            info->lowMeanNum++;
         }
         if(si2.sumQuality < opt->mean * read2->l_seq){
-            info[1]->lowMeanNum++;
+            info2->lowMeanNum++;
         }
-        info[0]->totalLowMeanNum++;
+        info->totalLowMeanNum++;
         return 0;
     }
 
@@ -143,38 +144,38 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
 //    else //has polyA
 //    {
 //        if(polyAType_==0){
-//            info[0]->polyANum++;
-//            info[1]->polyANum++;
+//            info->polyANum++;
+//            info2->polyANum++;
 //        }else{
 //            if(si1.isPolyA)
-//                info[0]->polyANum++;
+//                info->polyANum++;
 //            if(si2.isPolyA)
-//                info[1]->polyANum++;
+//                info2->polyANum++;
 //        }
-//        info[0]->totalPolyANum++;
+//        info->totalPolyANum++;
 //    }
 
-    info[0]->cleanBaseA += si1.a;
-    info[0]->cleanBaseC += si1.c;
-    info[0]->cleanBaseG += si1.g;
-    info[0]->cleanBaseT += si1.t;
-    info[0]->cleanBaseN += si1.n;
-    info[0]->cleanQ20 += si1.q20;
-    info[0]->cleanQ30 += si1.q30;
-    info[0]->cleanTotalReadNum++;
-    info[0]->cleanTotalBaseNum += read1->l_seq;
-    calculate_base_distribution(read1, info[0]);
+    info->cleanBaseA += si1.a;
+    info->cleanBaseC += si1.c;
+    info->cleanBaseG += si1.g;
+    info->cleanBaseT += si1.t;
+    info->cleanBaseN += si1.n;
+    info->cleanQ20 += si1.q20;
+    info->cleanQ30 += si1.q30;
+    info->cleanTotalReadNum++;
+    info->cleanTotalBaseNum += read1->l_seq;
+    calculate_base_distribution(read1, info);
 
-    info[1]->cleanBaseA += si2.a;
-    info[1]->cleanBaseC += si2.c;
-    info[1]->cleanBaseG += si2.g;
-    info[1]->cleanBaseT += si2.t;
-    info[1]->cleanBaseN += si2.n;
-    info[1]->cleanQ20 += si2.q20;
-    info[1]->cleanQ30 += si2.q30;
-    info[1]->cleanTotalReadNum++;
-    info[1]->cleanTotalBaseNum += read2->l_seq;
-    calculate_base_distribution(read2, info[1]);
+    info2->cleanBaseA += si2.a;
+    info2->cleanBaseC += si2.c;
+    info2->cleanBaseG += si2.g;
+    info2->cleanBaseT += si2.t;
+    info2->cleanBaseN += si2.n;
+    info2->cleanQ20 += si2.q20;
+    info2->cleanQ30 += si2.q30;
+    info2->cleanTotalReadNum++;
+    info2->cleanTotalBaseNum += read2->l_seq;
+    calculate_base_distribution(read2, info2);
 
     return 1;
 }
@@ -220,7 +221,7 @@ void calculate_base_distribution(bseq1_t *read, FqInfo *info) {
 void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si) {
     int qual, i;
 
-    info->rawTotalReadNum ++;
+    info->rawTotalReadNum++;
     info->rawTotalBaseNum += read->l_seq;
 
     //todo 切除低质量末端
@@ -230,8 +231,6 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
 
     int right = read->l_seq - tail_trim_n;
     int sumQual = 0;
-
-    printf("qual: %s\n", read->qual);
 
     for (i=0; i<read->l_seq; ++i)
     {
@@ -365,8 +364,6 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
     {
         si->isPolyA = (1.0 * si->a / read->l_seq) >= (opt->polyA - 1E-6);
     }
-
-    printf("sumQuality %d\n", si->sumQuality);
 }
 
 //int has_adapter();  todo adapterList 情况
@@ -476,12 +473,125 @@ filter_opt_t *filter_opt_init() {
     return o;
 }
 
-StatisInfo *StatisInfo_init(){
-    StatisInfo *o;
-    o = calloc(1, sizeof(StatisInfo));
-    o->hasAdpt = 0;
-    o->sumQuality = 0;
-    o->lowQual = 0;
-    o->isLowQual = 0;
+FqInfo *fq_info_init() {
+    int i, j;
+    FqInfo *o = calloc(2, sizeof(FqInfo));
+    FqInfo *o2 = o + 1;
+
+    o->rawReadLength = 0;
+    o->rawReadLength = 0;     //raw data 读长
+    o->cleanReadLength = 0;   //clean data 读长
+    o->rawTotalReadNum = 0;  //raw data read个数
+    o->cleanTotalReadNum = 0;//clean data read 个数
+    o->rawTotalBaseNum = 0;  //raw data total base number
+    o->cleanTotalBaseNum = 0; //clean data total base number
+    o->rawBaseA = 0;     //raw data base A number
+    o->cleanBaseA = 0;   //clean data base A number
+    o->rawBaseC = 0;     //raw data base C number
+    o->cleanBaseC = 0; //clean data base C number
+    o->rawBaseG = 0; //raw data base G number
+    o->cleanBaseG = 0; //clean data base G number
+    o->rawBaseT = 0; //raw data base T number
+    o->cleanBaseT = 0; //clean data base T number
+    o->rawBaseN = 0; //raw data base N number
+    o->cleanBaseN = 0; //clean data base N number
+    o->rawQ20 = 0; //rawfq文件中碱基质量>=20的碱基总数
+    o->cleanQ20 = 0; //cleanfq文件中碱基质量>=20的碱基总数
+    o->rawQ30 = 0; //rawfq文件中碱基质量>=30的碱基总数
+    o->cleanQ30 = 0; //cleanfq文件中碱基质量>=30的碱基总数
+
+    o->adapterNum = 0;  //the number of read which contain adapter in raw data
+    o->nExceedNum = 0;  //the number of read which n rate was exceed in raw data
+    o->lowQualNum = 0;  //low qualtiy read number in raw data
+    o->lowMeanNum = 0;  //low mean quality read number in raw data
+    o->smallInsertNum = 0;  //samll inert number in raw data
+    o->polyANum = 0;    //polyA number in raw data
+    o->short_length_n = 0;    //the read is too short
+
+    o->total_short_length_n = 0;
+    o->totalAdapterNum = 0;
+    o->totalNExceedNum = 0;
+    o->totalLowQualNum = 0;
+    o->totalLowMeanNum = 0;
+    o->totalSmallInsertNum = 0;
+    o->totalPolyANum = 0;
+
+    o->totalCutAdaptorNum = 0;
+
+    o->maxQualityValue = 41;
+
+    for(i=0; i < MAX_LENGTH; i++){
+        o->cleanReadLengthDistribution[i] = 0;
+        for(j=0; j < 5; j++){
+            o->base[i][j] = 0;
+            o->clean_base[i][j] = 0;
+        }
+        for(j=0; j < 2; j++){
+            o->q20q30[i][j] = 0;
+            o->clean_q20q30[i][j] = 0;
+        }
+        for(j=0; j <= MAX_QUALITY; j++){
+            o->qual[i][j] = 0;
+            o->clean_qual[i][j] = 0;
+        }
+    }
+
+    o2->rawReadLength = 0;
+    o2->rawReadLength = 0;     //raw data 读长
+    o2->cleanReadLength = 0;   //clean data 读长
+    o2->rawTotalReadNum = 0;  //raw data read个数
+    o2->cleanTotalReadNum = 0;//clean data read 个数
+    o2->rawTotalBaseNum = 0;  //raw data total base number
+    o2->cleanTotalBaseNum = 0; //clean data total base number
+    o2->rawBaseA = 0;     //raw data base A number
+    o2->cleanBaseA = 0;   //clean data base A number
+    o2->rawBaseC = 0;     //raw data base C number
+    o2->cleanBaseC = 0; //clean data base C number
+    o2->rawBaseG = 0; //raw data base G number
+    o2->cleanBaseG = 0; //clean data base G number
+    o2->rawBaseT = 0; //raw data base T number
+    o2->cleanBaseT = 0; //clean data base T number
+    o2->rawBaseN = 0; //raw data base N number
+    o2->cleanBaseN = 0; //clean data base N number
+    o2->rawQ20 = 0; //rawfq文件中碱基质量>=20的碱基总数
+    o2->cleanQ20 = 0; //cleanfq文件中碱基质量>=20的碱基总数
+    o2->rawQ30 = 0; //rawfq文件中碱基质量>=30的碱基总数
+    o2->cleanQ30 = 0; //cleanfq文件中碱基质量>=30的碱基总数
+
+    o2->adapterNum = 0;  //the number of read which contain adapter in raw data
+    o2->nExceedNum = 0;  //the number of read which n rate was exceed in raw data
+    o2->lowQualNum = 0;  //low qualtiy read number in raw data
+    o2->lowMeanNum = 0;  //low mean quality read number in raw data
+    o2->smallInsertNum = 0;  //samll inert number in raw data
+    o2->polyANum = 0;    //polyA number in raw data
+    o2->short_length_n = 0;    //the read is too short
+
+    o2->total_short_length_n = 0;
+    o2->totalAdapterNum = 0;
+    o2->totalNExceedNum = 0;
+    o2->totalLowQualNum = 0;
+    o2->totalLowMeanNum = 0;
+    o2->totalSmallInsertNum = 0;
+    o2->totalPolyANum = 0;
+
+    o2->totalCutAdaptorNum = 0;
+
+    o2->maxQualityValue = 41;
+
+    for(i=0; i < MAX_LENGTH; i++){
+        o2->cleanReadLengthDistribution[i] = 0;
+        for(j=0; j < 5; j++){
+            o2->base[i][j] = 0;
+            o2->clean_base[i][j] = 0;
+        }
+        for(j=0; j < 2; j++){
+            o2->q20q30[i][j] = 0;
+            o2->clean_q20q30[i][j] = 0;
+        }
+        for(j=0; j <= MAX_QUALITY; j++){
+            o2->qual[i][j] = 0;
+            o2->clean_qual[i][j] = 0;
+        }
+    }
     return o;
 }

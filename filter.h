@@ -112,17 +112,19 @@ typedef struct {
     bseq1_t *seqs;
     int64_t n_processed;
     int is_clean;   // 0: should be filtered; 1: good
-    FqInfo *fq_info[2];
+    FqInfo *fq_info;
 } filter_worker_t;
 
 filter_opt_t* filter_opt_init();
 
+FqInfo *fq_info_init();
+
 //void soapnuke_filter(bseq1_t *reads, filter_opt_t opt, int n_seq);
-void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info[2]);
+void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info);
 
 int statistics_se(bseq1_t *read1, const filter_opt_t *opt, FqInfo *info);
 
-int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInfo *info[2]);
+int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInfo *info);
 
 void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si);
 

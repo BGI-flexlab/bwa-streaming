@@ -63,7 +63,7 @@ static void *process(void *shared, int step, void *_data)
         return ret;
     } else if (step == 1) {
         const filter_opt_t *opt = aux->opt;
-        soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, &(aux->fq_info));
+        soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
         aux->n_processed += data->n_seqs;
         return data;
     } else if (step == 2) {
@@ -182,16 +182,15 @@ int main_filter(int argc, char **argv) {
     aux.ks = kseq_init(fp);
     aux.opt = filter_opt;
     aux.actual_chunk_size = CHUNK_SIZE;
-    aux.fq_info = alloca(2*sizeof(FqInfo));
-//    memset(aux.fq_info, 0, 2*sizeof(FqInfo));
+    aux.fq_info = fq_info_init();
 
     kt_pipeline(1, process, &aux, 3);
 
 //    printf("length:%lu\n", aux.fq_info->total_short_length_n);
 //    printf("cleanReadLength:%d\n", aux.fq_info->cleanReadLength);
 
-//    free(filter_opt);
-//    free(aux.fq_info);
+    free(filter_opt);
+    free(aux.fq_info);
     return 0;
 }
 
