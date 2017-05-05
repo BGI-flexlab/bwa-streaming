@@ -112,7 +112,6 @@ typedef struct {
     const filter_opt_t *filter_opt;
     bseq1_t *seqs;
     int64_t n_processed;
-    int is_clean;   // 0: should be filtered; 1: good
     FqInfo *fq_info;
 } filter_worker_t;
 
@@ -121,6 +120,8 @@ filter_opt_t* filter_opt_init();
 FqInfo *fq_info_init();
 
 void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info);
+
+void remove_bad_reads(filter_worker_t *w);
 
 int statistics_se(bseq1_t *read1, const filter_opt_t *opt, FqInfo *info);
 

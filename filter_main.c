@@ -216,8 +216,6 @@ int main_filter(int argc, char **argv) {
     kt_pipeline(2, process, &aux, 3);
 
     report_print(aux.fq_info, aux.fq_info+1);
-//    printf("length:%lu\n", aux.fq_info->total_short_length_n);
-//    printf("cleanReadLength:%d\n", aux.fq_info->cleanReadLength);
 
     free(filter_opt);
     free(aux.fq_info);

@@ -18,10 +18,10 @@ static void worker(void *data, int i, int tid)
 //        w->is_clean = statistics_se(w->seqs[i<<1|0],w->seqs[i<<1|1], w->filter_opt, w->aux[tid]);
     } else{
         if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1/2 <=====\n", w->seqs[i<<1|0].name);
-        w->is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->fq_info);
-        w->seqs[i<<1|0].filter = w->is_clean;
-        w->seqs[i<<1|1].filter = w->is_clean;
-        if (bwa_verbose >= 4) printf("=====> Processing read filter stat: '%d' <=====\n", w->is_clean);
+        int is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->fq_info);
+        w->seqs[i<<1|0].filter = is_clean;
+        w->seqs[i<<1|1].filter = is_clean;
+        if (bwa_verbose >= 4) printf("=====> Processing read filter stat: '%d' <=====\n", is_clean);
     }
 }
 
@@ -39,6 +39,12 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
     kt_for(opt->n_threads, worker, &w, (opt->is_pe)? n>>1 : n); // generate alignment
     if (bwa_verbose >= 3)
         fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
+    remove_bad_reads(&w);
+}
+
+// todo:  resize w.seqs
+void remove_bad_reads(filter_worker_t *w) {
+
 }
 
 int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInfo *info)

@@ -36,6 +36,7 @@ typedef struct {
 	int copy_comment, actual_chunk_size;
 	bwaidx_t *idx;
 	FqInfo *fq_info;
+	filter_opt_t *filter_opt;
 } ktp_aux_t;
 
 typedef struct {
@@ -71,6 +72,8 @@ static void *process(void *shared, int step, void *_data)
 			fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, ret->n_seqs, (long)size);
 		return ret;
 	} else if (step == 1) {
+		soapnuke_filter(aux->filter_opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
+
 		const mem_opt_t *opt = aux->opt;
 		const bwaidx_t *idx = aux->idx;
 		if (opt->flag & MEM_F_SMARTPE) {
@@ -465,8 +468,13 @@ int main_mem(int argc, char *argv[])
 	aux.fq_info = fq_info_init();
 
 	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
+
+	report_print(aux.fq_info, aux.fq_info+1);
+
 	free(hdr_line);
 	free(opt);
+	free(filter_opt);
+	free(aux.fq_info);
 	bwa_idx_destroy(aux.idx);
 	kseq_destroy(aux.ks);
 	err_gzclose(fp); kclose(ko);
