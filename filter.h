@@ -27,6 +27,7 @@ typedef struct
 }StatisInfo;
 
 typedef struct {
+    int skip_filter;
     int is_phred64;
     int is_pe;
     int n_threads;

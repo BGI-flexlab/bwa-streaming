@@ -13,6 +13,7 @@
 #include "bntseq.h"
 #include "kseq.h"
 #include "bwtalnpe.h"
+#include "filter.h"
 
 KSEQ_DECLARE(gzFile)
 
@@ -34,13 +35,13 @@ typedef struct {
 	int64_t n_processed;
 	int copy_comment, actual_chunk_size;
 	bwaidx_t *idx;
+	FqInfo *fq_info;
 } ktp_aux_t;
 
 typedef struct {
 	ktp_aux_t *aux;
 	int n_seqs;
 	bseq1_t *seqs;
-	FqInfo *filterInfo;
 } ktp_data_t;
 
 static void *process(void *shared, int step, void *_data)
@@ -147,6 +148,7 @@ int main_mem(int argc, char *argv[])
 	memset(&opt0, 0, sizeof(mem_opt_t));
 
 	static struct option long_options[] = {
+			{"skip_filter", no_argument, 0, 0},
 			{"adapter1", required_argument, 0, 0},
 			{"adapter2", required_argument, 0, 0},
 			{"misMatch", required_argument, 0, 0},
@@ -172,7 +174,8 @@ int main_mem(int argc, char *argv[])
             break;
 
         if(c == 0) {
-            if(strcmp(long_options[option_index].name, "adapter1")==0) filter_opt->adp1 = optarg;
+            if(strcmp(long_options[option_index].name, "skip_filter")==0) filter_opt->skip_filter = 1;
+			else if(strcmp(long_options[option_index].name, "adapter1")==0) filter_opt->adp1 = optarg;
             else if(strcmp(long_options[option_index].name, "adapter2")==0) filter_opt->adp2 = optarg;
             else if(strcmp(long_options[option_index].name, "misMatch")==0) filter_opt->misMatch = atoi(optarg);
             else if(strcmp(long_options[option_index].name, "matchRatio")==0) filter_opt->matchRatio = (float) atof(optarg);
@@ -353,6 +356,7 @@ int main_mem(int argc, char *argv[])
 		fprintf(stderr, "                     (4 sigma from the mean if absent) and min of the insert size distribution.\n");
 		fprintf(stderr, "                     FR orientation only. [inferred]\n");
 		fprintf(stderr, "\nFilter options:\n\n");
+		fprintf(stderr, "       --skip_filter          skip filter step [off]\n");
 		fprintf(stderr, "       --adapter1    STR      3' adapter sequence of fq1 file  [null]\n");
 		fprintf(stderr, "       --adapter2    STR      5' adapter sequence of fq2 file (only for PE reads)  [null]\n");
 		fprintf(stderr, "       --misMatch    INT      the max mismatch number when match the adapter [1]\n");
@@ -458,6 +462,8 @@ int main_mem(int argc, char *argv[])
         bwa_print_sam_hdr2(aux.idx->bns, sl, rg_number);
 
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
+	aux.fq_info = fq_info_init();
+
 	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 	free(hdr_line);
 	free(opt);

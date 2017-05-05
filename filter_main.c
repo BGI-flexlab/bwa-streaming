@@ -213,7 +213,7 @@ int main_filter(int argc, char **argv) {
     aux.actual_chunk_size = CHUNK_SIZE;
     aux.fq_info = fq_info_init();
 
-    kt_pipeline(1, process, &aux, 3);
+    kt_pipeline(2, process, &aux, 3);
 
     report_print(aux.fq_info, aux.fq_info+1);
 //    printf("length:%lu\n", aux.fq_info->total_short_length_n);
@@ -244,8 +244,8 @@ int usage() {
     fprintf(stderr, "       --tile        STR      tile number to ignore reads, such as 1101-1104,1205. [null]\n");
     fprintf(stderr, "       --polyA       FLOAT    filter poly A, percent of A, 0 means do not filter. [0]\n");
     fprintf(stderr, "       --polyAType   INT      filter poly A type, 0->both two reads are poly a, 1->at least one reads is poly a, then filter. [0]\n");
+    fprintf(stderr, "       --is_se       INT      single end read [off]\n");
     fprintf(stderr, "    -t,--thread      INT      number of threads [1]\n");
-    fprintf(stderr, "    -p,--is_se       INT      single end read [off]\n");
     fprintf(stderr, "    -i,--phred64     INT      set quality system as phred64, default is phred33 [off]\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "Note: Please read the man page for detailed description of the command line and options.\n");

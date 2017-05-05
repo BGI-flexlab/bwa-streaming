@@ -453,6 +453,7 @@ filter_opt_t *filter_opt_init() {
     int i;
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
+    o->skip_filter = 1;
     o->is_phred64 = 0;
     o->is_pe = 1;
     o->n_threads = 1;
