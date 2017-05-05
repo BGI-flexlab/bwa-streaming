@@ -25,7 +25,8 @@ static void worker(void *data, int i, int tid)
     }
 }
 
-void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info) {
+void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info)
+{
     extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
     filter_worker_t w;
     double ctime, rtime;
@@ -43,7 +44,8 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
 }
 
 // todo:  resize w.seqs
-void remove_bad_reads(filter_worker_t *w) {
+void remove_bad_reads(filter_worker_t *w)
+{
 
 }
 
@@ -186,7 +188,8 @@ int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInf
     return 1;
 }
 
-void calculate_base_distribution(bseq1_t *read, FqInfo *info) {
+void calculate_base_distribution(bseq1_t *read, FqInfo *info)
+{
     int qual, i;
 
     for (i=0; i<read->l_seq; ++i) {
@@ -224,7 +227,8 @@ void calculate_base_distribution(bseq1_t *read, FqInfo *info) {
     }
 }
 
-void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si) {
+void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si)
+{
     int qual, i;
 
     info->rawReadLength = read->l_seq > info->rawReadLength ? read->l_seq : info->rawReadLength;
@@ -390,7 +394,8 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
 //}
 
 // -1: no adapter  -2: filter adapter due to the adapter is too long  >0: adapter index to trim
-int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
+int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt)
+{
     int find = -1, c;
     int adptLen = (int) strlen(adapter);
     int minMatchLen = (int) ceilf(adptLen * opt->matchRatio);
@@ -455,7 +460,8 @@ int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) {
     return find;
 }
 
-filter_opt_t *filter_opt_init() {
+filter_opt_t *filter_opt_init()
+{
     int i;
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
@@ -483,7 +489,8 @@ filter_opt_t *filter_opt_init() {
     return o;
 }
 
-FqInfo *fq_info_init() {
+FqInfo *fq_info_init()
+{
     int i, j;
     FqInfo *o = calloc(2, sizeof(FqInfo));
     FqInfo *o2 = o + 1;
@@ -608,8 +615,6 @@ FqInfo *fq_info_init() {
 
 void print_fq_info(const FqInfo *fqInfo)
 {
-
-
     err_printf("%d\t%d\t%lu\t%lu\t%d\t",fqInfo->rawReadLength, fqInfo->cleanReadLength, fqInfo->rawTotalReadNum, fqInfo->cleanTotalReadNum, 0);
     err_printf("%lu\t%lu\t%lu\t%lu\t%lu\t",fqInfo->rawTotalBaseNum, fqInfo->cleanTotalBaseNum, fqInfo->rawBaseA, fqInfo->cleanBaseA, fqInfo->rawBaseC);
     err_printf("%lu\t%lu\t%lu\t%lu\t%lu\t",fqInfo->cleanBaseC, fqInfo->rawBaseG, fqInfo->cleanBaseG, fqInfo->rawBaseT, fqInfo->cleanBaseT);
@@ -664,7 +669,8 @@ void print_fq_info(const FqInfo *fqInfo)
     }
 }
 
-void report_print(const FqInfo *fqInfo1, const FqInfo *fqInfo2) {
+void report_print(const FqInfo *fqInfo1, const FqInfo *fqInfo2)
+{
     err_fputs("#Fq1_statistical_information\t#S\n", stdout);
     print_fq_info(fqInfo1);
     if (fqInfo2 != NULL){

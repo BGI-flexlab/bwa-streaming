@@ -114,7 +114,8 @@ static void *process(void *shared, int step, void *_data)
     return 0;
 }
 
-int main_filter(int argc, char **argv) {
+int main_filter(int argc, char **argv)
+{
     int c, fd;
     gzFile fp;
     void *ko = 0;
@@ -222,7 +223,8 @@ int main_filter(int argc, char **argv) {
     return 0;
 }
 
-int usage() {
+int usage()
+{
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage: bwa filter [options] -\n");
     fprintf(stderr, "\nFilter options:\n\n");
