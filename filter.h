@@ -143,4 +143,6 @@ int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) ;
  */
 void calculate_base_distribution(bseq1_t* read, FqInfo *info);
 
+void report_print(const FqInfo *fqInfo1, const FqInfo *fqInfo2);
+
 #endif //BWA_FILTER_H

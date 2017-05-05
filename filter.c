@@ -221,6 +221,7 @@ void calculate_base_distribution(bseq1_t *read, FqInfo *info) {
 void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_trim_n, FqInfo *info, StatisInfo *si) {
     int qual, i;
 
+    info->rawReadLength = read->l_seq > info->rawReadLength ? read->l_seq : info->rawReadLength;
     info->rawTotalReadNum++;
     info->rawTotalBaseNum += read->l_seq;
 
@@ -344,6 +345,8 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
 
     //clean data read length
     read->l_seq = read->l_seq - head_trim_n - tail_trim_n;
+    info->cleanReadLength = read->l_seq > info->cleanReadLength ? read->l_seq : info->cleanReadLength;
+
     if(read->l_seq < 0){
         read->l_seq = 0;
         read->seq[0] = '\0';
@@ -594,4 +597,71 @@ FqInfo *fq_info_init() {
         }
     }
     return o;
+}
+
+void print_fq_info(const FqInfo *fqInfo)
+{
+
+
+    err_printf("%d\t%d\t%lu\t%lu\t%d\t",fqInfo->rawReadLength, fqInfo->cleanReadLength, fqInfo->rawTotalReadNum, fqInfo->cleanTotalReadNum, 0);
+    err_printf("%lu\t%lu\t%lu\t%lu\t%lu\t",fqInfo->rawTotalBaseNum, fqInfo->cleanTotalBaseNum, fqInfo->rawBaseA, fqInfo->cleanBaseA, fqInfo->rawBaseC);
+    err_printf("%lu\t%lu\t%lu\t%lu\t%lu\t",fqInfo->cleanBaseC, fqInfo->rawBaseG, fqInfo->cleanBaseG, fqInfo->rawBaseT, fqInfo->cleanBaseT);
+    err_printf("%lu\t%lu\t%lu\t%lu\t%lu\t",fqInfo->rawBaseN, fqInfo->cleanBaseN, fqInfo->rawQ20, fqInfo->cleanQ20, fqInfo->rawQ30);
+    err_printf("%lu\t%d\t%lu\t%lu\t%lu\t",fqInfo->cleanQ30, 0, fqInfo->adapterNum, fqInfo->nExceedNum, fqInfo->lowQualNum);
+    err_printf("%lu\t%lu\t%lu\t%d\t%lu\t",fqInfo->lowMeanNum, fqInfo->smallInsertNum, fqInfo->polyANum, 0, fqInfo->totalAdapterNum);
+    err_printf("%lu\t%lu\t%lu\t%lu\t%lu\t",fqInfo->totalNExceedNum, fqInfo->totalLowQualNum, fqInfo->totalSmallInsertNum, fqInfo->totalPolyANum, fqInfo->totalCutAdaptorNum);
+    err_printf("%d#S\n",fqInfo->maxQualityValue);
+
+    //base distributions by read position
+    err_printf("%s\t#S\n", "#Base_distributions_by_read_position");
+    int i, j;
+    for (i=0; i<fqInfo->rawReadLength; ++i)
+    {
+        err_printf("%lu", fqInfo->base[i][0]);
+        for (j=1; j<5; j++)
+        {
+            err_printf("\t%lu", fqInfo->base[i][j]);
+        }
+        err_fputs("#S\n", stdout);
+
+        err_printf("%lu", fqInfo->clean_base[i][0]);
+        for (j=1; j<5; j++)
+        {
+            err_printf("\t%lu", fqInfo->clean_base[i][j]);
+        }
+        err_fputs("#S\n", stdout);
+    }
+
+    //Raw Base_quality_value_distribution_by_read_position && Distribution_of_Q20_Q30_bases_by_read_position
+    err_printf("%s\t#S\n", "#Raw_Base_quality_value_distribution_by_read_position");
+    for (i=0; i<fqInfo->rawReadLength; ++i)
+    {
+        err_printf("%lu\t%lu", fqInfo->q20q30[i][0],fqInfo->q20q30[i][1]);
+        for (j=0; j<=fqInfo->maxQualityValue; j++)
+        {
+            err_printf("\t%lu", fqInfo->qual[i][j]);
+        }
+        err_fputs("#S\n", stdout);
+    }
+
+    //Clean Base_quality_value_distribution_by_read_position && Distribution_of_Q20_Q30_bases_by_read_position
+    err_printf("%s\t#S\n", "#Clean_Base_quality_value_distribution_by_read_position");
+    for (i=0; i<fqInfo->cleanReadLength; ++i)
+    {
+        err_printf("%lu\t%lu", fqInfo->clean_q20q30[i][0],fqInfo->clean_q20q30[i][1]);
+        for (j=0; j<=fqInfo->maxQualityValue; j++)
+        {
+            err_printf("\t%lu", fqInfo->clean_qual[i][j]);
+        }
+        err_fputs("#S\n", stdout);
+    }
+}
+
+void report_print(const FqInfo *fqInfo1, const FqInfo *fqInfo2) {
+    err_fputs("#Fq1_statistical_information\t#S\n", stdout);
+    print_fq_info(fqInfo1);
+    if (fqInfo2 != NULL){
+        err_fputs("#Fq2_statistical_information\t#S\n", stdout);
+        print_fq_info(fqInfo2);
+    }
 }
