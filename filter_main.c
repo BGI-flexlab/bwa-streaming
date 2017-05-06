@@ -28,12 +28,12 @@ typedef struct {
     int copy_comment, actual_chunk_size;
     FqInfo *fq_info;
 } ktp_aux_t;
-
-typedef struct {
-    ktp_aux_t *aux;
-    int n_seqs;
-    bseq1_t *seqs;
-} ktp_data_t;
+//
+//typedef struct {
+////    ktp_aux_t *aux;
+//    int n_seqs;
+//    bseq1_t *seqs;
+//} ktp_data_t;
 
 
 static void *process(void *shared, int step, void *_data)
@@ -64,6 +64,8 @@ static void *process(void *shared, int step, void *_data)
     } else if (step == 1) {
         const filter_opt_t *opt = aux->opt;
         soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
+        remove_bad_reads(data);
+
         aux->n_processed += data->n_seqs;
         return data;
     } else if (step == 2) {

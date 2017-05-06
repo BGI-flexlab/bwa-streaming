@@ -40,19 +40,26 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
     kt_for(opt->n_threads, worker, &w, (opt->is_pe)? n>>1 : n); // generate alignment
     if (bwa_verbose >= 3)
         fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
-    remove_bad_reads(&w);
 }
 
 // todo:  resize w.seqs
-void remove_bad_reads(filter_worker_t *w)
+void remove_bad_reads(ktp_data_t *data)
 {
-
+    int i, index=-1;
+    for(i=0, index=0; i < data->n_seqs;i++){
+        if(!data->seqs[i].filter){
+            if(i != index){
+                memcpy(data->seqs + index, data->seqs + i, sizeof(bseq1_t));
+            }
+            index ++;
+        }
+    }
+    data->n_seqs = index + 1;
+    realloc(data->seqs, data->n_seqs* sizeof(bseq1_t));
 }
 
 int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, FqInfo *info)
 {
-//    info[0]->total_short_length_n++;
-//    return 0;
     FqInfo *info2 = info + 1;
     StatisInfo si1, si2;
     memset(&si1, 0, sizeof(StatisInfo));

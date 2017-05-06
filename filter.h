@@ -52,8 +52,10 @@ typedef struct {
 //FqInfo结构用于存储过滤的所有统计信息。
 typedef struct
 {
-    unsigned int rawReadLength;     //raw data 读长
-    unsigned int cleanReadLength;   //clean data 读长
+    int maxQualityValue;  //记录fq文件中碱基的最大质量值.
+    int rawReadLength;     //raw data 读长
+    int cleanReadLength;   //clean data 读长
+
     unsigned long rawTotalReadNum;  //raw data read个数
     unsigned long cleanTotalReadNum;//clean data read 个数
     unsigned long rawTotalBaseNum;  //raw data total base number
@@ -77,7 +79,7 @@ typedef struct
     unsigned long nExceedNum;  //the number of read which n rate was exceed in raw data
     unsigned long lowQualNum;  //low qualtiy read number in raw data
     unsigned long lowMeanNum;  //low mean quality read number in raw data
-    unsigned long smallInsertNum;  //samll inert number in raw data
+    unsigned long smallInsertNum;  //samll inert number in raw data  todo
     unsigned long polyANum;    //polyA number in raw data
     unsigned long short_length_n;    //the read is too short
 
@@ -103,9 +105,6 @@ typedef struct
     //Basequality value distribution by read position(Raw)
     unsigned long qual[MAX_LENGTH][MAX_QUALITY + 1];
     unsigned long clean_qual[MAX_LENGTH][MAX_QUALITY + 1];
-
-    int maxQualityValue;  //记录fq文件中碱基的最大质量值.
-
 } FqInfo;
 
 typedef struct {
@@ -115,13 +114,20 @@ typedef struct {
     FqInfo *fq_info;
 } filter_worker_t;
 
+
+typedef struct {
+//    ktp_aux_t *aux;
+    int n_seqs;
+    bseq1_t *seqs;
+} ktp_data_t;
+
 filter_opt_t* filter_opt_init();
 
 FqInfo *fq_info_init();
 
 void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, FqInfo *fq_info);
 
-void remove_bad_reads(filter_worker_t *w);
+void remove_bad_reads(ktp_data_t *w);
 
 int statistics_se(bseq1_t *read1, const filter_opt_t *opt, FqInfo *info);
 
