@@ -10,7 +10,7 @@ AOBJS=		bwashm.o bwase.o bwaseqio.o bwtgap.o bwtaln.o bwtalnpe.o bwtalnse.o baml
 			bwape.o kopen.o pemerge.o maxk.o \
 			bwtsw2_core.o bwtsw2_main.o bwtsw2_aux.o bwt_lite.o \
 			bwtsw2_chain.o fastmap.o bwtsw2_pair.o filter.o filter_main.o
-PROG=		bwa
+PROG=		bwa-streaming
 INCLUDES=	
 LIBS=		-lm -lz -lpthread
 SUBDIRS=	.
@@ -26,7 +26,7 @@ endif
 
 all:$(PROG)
 
-bwa:libbwa.a $(AOBJS) main.o
+bwa-streaming:libbwa.a $(AOBJS) main.o
 		$(CC) $(CFLAGS) $(DFLAGS) $(AOBJS) main.o -o $@ -L. -lbwa $(LIBS)
 
 bwamem-lite:libbwa.a example.o
