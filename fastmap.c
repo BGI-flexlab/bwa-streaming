@@ -467,6 +467,7 @@ int main_mem(int argc, char *argv[])
 
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
 	aux.fq_info = fq_info_init();
+    aux.filter_opt = filter_opt;
 
 	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 

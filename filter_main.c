@@ -68,7 +68,7 @@ static void *process(void *shared, int step, void *_data)
         if (bwa_verbose >= 3) {
             int64_t size = 0;
             for (i = 0; i < data->n_seqs; ++i) size += data->seqs[i].l_seq;
-            fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, data->n_seqs, (long) size);
+            fprintf(stderr, "[M::%s] pass %d clean sequences (%ld bp)...\n", __func__, data->n_seqs, (long) size);
         }
         aux->n_processed += data->n_seqs;
         return data;
