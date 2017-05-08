@@ -8,7 +8,6 @@
 #include "bwtaln.h"
 #include "bntseq.h"
 #include "utils.h"
-#include "bwtaln.h"
 #include "bwape.h"
 #include "readLine.h"
 #include "bwtalnpe.h"
@@ -40,6 +39,7 @@ typedef struct {
 static void *worker(void *data)
 {
 	thread_aux_t *d = (thread_aux_t*)data;
+    //bwa_filter(d->tid, d->bwt, d->n_seqs, d->seqs, d->opt);
 	bwa_cal_sa_reg_gap2(d->tid, d->bwt, d->n_seqs, d->seqs, d->opt);
 	return 0;
 }
@@ -179,11 +179,17 @@ void bwa_alnpe_core(const char *prefix, const char *fn_fa, const gap_opt_t *opt,
 		fprintf(stderr, "rg number : %d\n", rg_number);
 		free(popt->sample_list);
 	}
-	if(rg_number < 0)
-		bwa_print_sam_hdr(bns, rg_line);
-	else
+	if(rg_number < 0){
+		char *hdr_line = 0;
+		if (rg_line) {
+			hdr_line = bwa_insert_header(rg_line, hdr_line);
+		}
+		bwa_print_sam_hdr(bns, hdr_line);
+	}
+	else{
 		bwa_print_sam_hdr2(bns, sl, rg_number);
-		
+	}	
+	
 	// core loop
 	while ((bwa_read_seq_pe(ks, 0x40000, &n_seqs, opt->mode, opt->trim_qual, seqs)) != 0) {
 		int cnt_chg;

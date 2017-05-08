@@ -37,6 +37,9 @@
 #include "kseq.h"
 KSEQ_DECLARE(gzFile)
 
+#include "khash.h"
+KHASH_MAP_INIT_STR(str, int)
+
 #ifdef USE_MALLOC_WRAPPERS
 #  include "malloc_wrap.h"
 #endif
@@ -94,7 +97,7 @@ void bns_dump(const bntseq_t *bns, const char *prefix)
 
 bntseq_t *bns_restore_core(const char *ann_filename, const char* amb_filename, const char* pac_filename)
 {
-	char str[1024];
+	char str[8192];
 	FILE *fp;
 	const char *fname;
 	bntseq_t *bns;
@@ -117,14 +120,14 @@ bntseq_t *bns_restore_core(const char *ann_filename, const char* amb_filename, c
 			if (scanres != 2) goto badread;
 			p->name = strdup(str);
 			// read fasta comments 
-			while (str - q < sizeof(str) - 1 && (c = fgetc(fp)) != '\n' && c != EOF) *q++ = c;
+			while (q - str < sizeof(str) - 1 && (c = fgetc(fp)) != '\n' && c != EOF) *q++ = c;
 			while (c != '\n' && c != EOF) c = fgetc(fp);
 			if (c == EOF) {
 				scanres = EOF;
 				goto badread;
 			}
 			*q = 0;
-			if (q - str > 1) p->anno = strdup(str + 1); // skip leading space
+			if (q - str > 1 && strcmp(str, " (null)") != 0) p->anno = strdup(str + 1); // skip leading space
 			else p->anno = strdup("");
 			// read the rest
 			scanres = fscanf(fp, "%lld%d%d", &xx, &p->len, &p->n_ambs);
@@ -165,11 +168,41 @@ bntseq_t *bns_restore_core(const char *ann_filename, const char* amb_filename, c
 
 bntseq_t *bns_restore(const char *prefix)
 {  
-	char ann_filename[1024], amb_filename[1024], pac_filename[1024];
+	char ann_filename[1024], amb_filename[1024], pac_filename[1024], alt_filename[1024];
+	FILE *fp;
+	bntseq_t *bns;
 	strcat(strcpy(ann_filename, prefix), ".ann");
 	strcat(strcpy(amb_filename, prefix), ".amb");
 	strcat(strcpy(pac_filename, prefix), ".pac");
-	return bns_restore_core(ann_filename, amb_filename, pac_filename);
+	bns = bns_restore_core(ann_filename, amb_filename, pac_filename);
+	if (bns == 0) return 0;
+	if ((fp = fopen(strcat(strcpy(alt_filename, prefix), ".alt"), "r")) != 0) { // read .alt file if present
+		char str[1024];
+		khash_t(str) *h;
+		int c, i, absent;
+		khint_t k;
+		h = kh_init(str);
+		for (i = 0; i < bns->n_seqs; ++i) {
+			k = kh_put(str, h, bns->anns[i].name, &absent);
+			kh_val(h, k) = i;
+		}
+		i = 0;
+		while ((c = fgetc(fp)) != EOF) {
+			if (c == '\t' || c == '\n' || c == '\r') {
+				str[i] = 0;
+				if (str[0] != '@') {
+					k = kh_get(str, h, str);
+					if (k != kh_end(h))
+						bns->anns[kh_val(h, k)].is_alt = 1;
+				}
+				while (c != '\n' && c != EOF) c = fgetc(fp);
+				i = 0;
+			} else str[i++] = c; // FIXME: potential segfault here
+		}
+		kh_destroy(str, h);
+		fclose(fp);
+	}
+	return bns;
 }
 
 void bns_destroy(bntseq_t *bns)
@@ -201,7 +234,7 @@ static uint8_t *add1(const kseq_t *seq, bntseq_t *bns, uint8_t *pac, int64_t *m_
 	}
 	p = bns->anns + bns->n_seqs;
 	p->name = strdup((char*)seq->name.s);
-	p->anno = seq->comment.s? strdup((char*)seq->comment.s) : strdup("(null)");
+	p->anno = seq->comment.l > 0? strdup((char*)seq->comment.s) : strdup("(null)");
 	p->gi = 0; p->len = seq->seq.l;
 	p->offset = (bns->n_seqs == 0)? 0 : (p-1)->offset + (p-1)->len;
 	p->n_ambs = 0;
@@ -333,8 +366,9 @@ int bns_intv2rid(const bntseq_t *bns, int64_t rb, int64_t re)
 {
 	int is_rev, rid_b, rid_e;
 	if (rb < bns->l_pac && re > bns->l_pac) return -2;
+	assert(rb <= re);
 	rid_b = bns_pos2rid(bns, bns_depos(bns, rb, &is_rev));
-	rid_e = bns_pos2rid(bns, bns_depos(bns, re, &is_rev) - 1);
+	rid_e = rb < re? bns_pos2rid(bns, bns_depos(bns, re - 1, &is_rev)) : rid_b;
 	return rid_b == rid_e? rid_b : -1;
 }
 

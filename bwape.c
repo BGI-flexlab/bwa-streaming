@@ -788,7 +788,11 @@ void bwa_sai2sam_pe_core(const char *prefix, char *const fn_sa[2], char *const f
 	}
 
 	// core loop
-	bwa_print_sam_hdr(bns, rg_line);
+	char *hdr_line = 0;
+	if (rg_line) {
+		hdr_line = bwa_insert_header(rg_line, hdr_line);
+	}
+	bwa_print_sam_hdr(bns, hdr_line);
 	while ((seqs[0] = bwa_read_seq(ks[0], 0x40000, &n_seqs, opt0.mode, opt0.trim_qual)) != 0) {
 		int cnt_chg;
 		isize_info_t ii;
