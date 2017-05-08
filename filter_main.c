@@ -65,7 +65,11 @@ static void *process(void *shared, int step, void *_data)
         const filter_opt_t *opt = aux->opt;
         soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
         remove_bad_reads(data);
-
+        if (bwa_verbose >= 3) {
+            int64_t size = 0;
+            for (i = 0; i < data->n_seqs; ++i) size += data->seqs[i].l_seq;
+            fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, data->n_seqs, (long) size);
+        }
         aux->n_processed += data->n_seqs;
         return data;
     } else if (step == 2) {
@@ -222,6 +226,8 @@ int main_filter(int argc, char **argv)
 
     free(filter_opt);
     free(aux.fq_info);
+    kseq_destroy(aux.ks);
+    err_gzclose(fp); kclose(ko);
     return 0;
 }
 

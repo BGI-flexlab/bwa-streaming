@@ -19,8 +19,8 @@ static void worker(void *data, int i, int tid)
     } else{
         if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1/2 <=====\n", w->seqs[i<<1|0].name);
         int is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->fq_info);
-        w->seqs[i<<1|0].filter = is_clean;
-        w->seqs[i<<1|1].filter = is_clean;
+        w->seqs[i<<1|0].filter = !is_clean;
+        w->seqs[i<<1|1].filter = !is_clean;
         if (bwa_verbose >= 4) printf("=====> Processing read filter stat: '%d' <=====\n", is_clean);
     }
 }
@@ -45,13 +45,13 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
 // todo:  resize w.seqs
 void remove_bad_reads(ktp_data_t *data)
 {
-    int i, index=-1;
-    for(i=0, index=0; i < data->n_seqs;i++){
+    int i, index;
+    for(i=0, index=-1; i < data->n_seqs;i++){
         if(!data->seqs[i].filter){
+            index ++;
             if(i != index){
                 memcpy(data->seqs + index, data->seqs + i, sizeof(bseq1_t));
             }
-            index ++;
         }
     }
     data->n_seqs = index + 1;
