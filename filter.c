@@ -370,10 +370,11 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
         read->seq[0] = '\0';
     }else{
         //截断read的两端
-        read->seq[right] = '\0';
-        read->seq = read->seq + head_trim_n;
-        read->qual[right] = '\0';
-        read->qual = read->qual + head_trim_n;
+        strncpy(read->seq,read->seq+head_trim_n , read->l_seq);
+        read->seq[read->l_seq] = '\0';
+
+        strncpy(read->qual,read->qual+head_trim_n , read->l_seq);
+        read->qual[read->l_seq] = '\0';
     }
 
     si->nExceed = (si->n >= read->l_seq * opt->nRate);
@@ -472,7 +473,7 @@ filter_opt_t *filter_opt_init()
     int i;
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
-    o->skip_filter = 1;
+    o->skip_filter = 0;
     o->is_phred64 = 0;
     o->is_pe = 1;
     o->n_threads = 1;

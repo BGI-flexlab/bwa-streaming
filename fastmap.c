@@ -467,7 +467,9 @@ int main_mem(int argc, char *argv[])
 
 	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 
-	report_print(aux.fq_info, aux.fq_info+1);
+    if(!filter_opt->skip_filter) {
+        report_print(aux.fq_info, aux.fq_info + 1);
+    }
 
 	free(hdr_line);
 	free(opt);
