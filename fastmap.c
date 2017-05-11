@@ -39,12 +39,6 @@ typedef struct {
 	filter_opt_t *filter_opt;
 } ktp_aux_t;
 
-//typedef struct {
-////	ktp_aux_t *aux;
-//	int n_seqs;
-//	bseq1_t *seqs;
-//} ktp_data_t;
-
 static void *process(void *shared, int step, void *_data)
 {
 	ktp_aux_t *aux = (ktp_aux_t*)shared;
@@ -72,8 +66,10 @@ static void *process(void *shared, int step, void *_data)
 			fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, ret->n_seqs, (long)size);
 		return ret;
 	} else if (step == 1) {
-		soapnuke_filter(aux->filter_opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
-		remove_bad_reads(data);
+        if(!aux->filter_opt->skip_filter){
+		    soapnuke_filter(aux->filter_opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
+		    remove_bad_reads(data);
+        }
 
 		const mem_opt_t *opt = aux->opt;
 		const bwaidx_t *idx = aux->idx;
@@ -471,7 +467,9 @@ int main_mem(int argc, char *argv[])
 
 	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 
-	report_print(aux.fq_info, aux.fq_info+1);
+    if(!filter_opt->skip_filter) {
+        report_print(aux.fq_info, aux.fq_info + 1);
+    }
 
 	free(hdr_line);
 	free(opt);

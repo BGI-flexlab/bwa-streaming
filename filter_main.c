@@ -28,13 +28,6 @@ typedef struct {
     int copy_comment, actual_chunk_size;
     FqInfo *fq_info;
 } ktp_aux_t;
-//
-//typedef struct {
-////    ktp_aux_t *aux;
-//    int n_seqs;
-//    bseq1_t *seqs;
-//} ktp_data_t;
-
 
 static void *process(void *shared, int step, void *_data)
 {
