@@ -45,11 +45,11 @@ static void *process(void *shared, int step, void *_data)
             return 0;
         }
 
-        if (!aux->copy_comment)
-            for (i = 0; i < ret->n_seqs; ++i) {
-                free(ret->seqs[i].comment);
-                ret->seqs[i].comment = 0;
-            }
+//        if (!aux->copy_comment)
+//            for (i = 0; i < ret->n_seqs; ++i) {
+//                free(ret->seqs[i].comment);
+//                ret->seqs[i].comment = 0;
+//            }
         for (i = 0; i < ret->n_seqs; ++i) size += ret->seqs[i].l_seq;
         if (bwa_verbose >= 3)
             fprintf(stderr, "[M::%s] read %d sequences (%ld bp)...\n", __func__, ret->n_seqs, (long)size);
