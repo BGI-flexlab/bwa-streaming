@@ -35,7 +35,7 @@ typedef struct {
 	int64_t n_processed;
 	int copy_comment, actual_chunk_size;
 	bwaidx_t *idx;
-	FqInfo *fq_info;
+	read_info_t **read_info;
 	filter_opt_t *filter_opt;
 } ktp_aux_t;
 
@@ -67,7 +67,7 @@ static void *process(void *shared, int step, void *_data)
 		return ret;
 	} else if (step == 1) {
         if(!aux->filter_opt->skip_filter){
-		    soapnuke_filter(aux->filter_opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
+		    soapnuke_filter(aux->filter_opt, aux->n_processed, data->n_seqs, data->seqs, aux->read_info);
 		    remove_bad_reads(data);
         }
 
@@ -456,25 +456,47 @@ int main_mem(int argc, char *argv[])
         rg_number = read_sample_list(opt->sample_list, sl);
         free(opt->sample_list);
     }
-    if(rg_number < 0)
+    if(rg_number < 0){
         bwa_print_sam_hdr(aux.idx->bns, hdr_line);
-    else
+		aux.read_info = (read_info_t**)malloc(sizeof(read_info_t *));
+		aux.read_info[0] = read_info_init(filter_opt->is_pe);
+	}else{
         bwa_print_sam_hdr2(aux.idx->bns, sl, rg_number);
+		aux.read_info = (read_info_t**)malloc(rg_number*sizeof(read_info_t *));
+		for(i=0; i<rg_number; i++){
+			aux.read_info[i] = read_info_init(filter_opt->is_pe);
+			aux.read_info[i]->id = i;
+			aux.read_info[i]->rg_id = sl[i]->rg_id;
+		}
+	}
 
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
-	aux.fq_info = fq_info_init();
     aux.filter_opt = filter_opt;
 
 	kt_pipeline(no_mt_io? 1 : 2, process, &aux, 3);
 
     if(!filter_opt->skip_filter) {
-        report_print(aux.fq_info, aux.fq_info + 1);
+		if(rg_number < 0){
+			report_print(aux.read_info[i]);
+		}else{
+			for(i=0; i<rg_number; i++){
+				report_print(aux.read_info[i]);
+			}
+		}
     }
 
 	free(hdr_line);
 	free(opt);
 	free(filter_opt);
-	free(aux.fq_info);
+	if(rg_number < 0){
+		read_info_destroy(aux.read_info[0]);
+		free(aux.read_info);
+	}else{
+		for(i=0; i<rg_number; i++){
+			read_info_destroy(aux.read_info[i]);
+		}
+		free(aux.read_info);
+	}
 	bwa_idx_destroy(aux.idx);
 	kseq_destroy(aux.ks);
 	err_gzclose(fp); kclose(ko);

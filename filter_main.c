@@ -26,7 +26,7 @@ typedef struct {
     const filter_opt_t *opt;
     int64_t n_processed;
     int copy_comment, actual_chunk_size;
-    FqInfo *fq_info;
+    read_info_t **read_info;
 } ktp_aux_t;
 
 static void *process(void *shared, int step, void *_data)
@@ -56,7 +56,7 @@ static void *process(void *shared, int step, void *_data)
         return ret;
     } else if (step == 1) {
         const filter_opt_t *opt = aux->opt;
-        soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, aux->fq_info);
+        soapnuke_filter(opt, aux->n_processed, data->n_seqs, data->seqs, aux->read_info);
         remove_bad_reads(data);
         if (bwa_verbose >= 3) {
             int64_t size = 0;
@@ -211,14 +211,16 @@ int main_filter(int argc, char **argv)
     aux.ks = kseq_init(fp);
     aux.opt = filter_opt;
     aux.actual_chunk_size = CHUNK_SIZE;
-    aux.fq_info = fq_info_init();
+    aux.read_info = (read_info_t**)malloc(sizeof(read_info_t *));
+    aux.read_info[0] = read_info_init(filter_opt->is_pe);
 
     kt_pipeline(2, process, &aux, 3);
 
-    report_print(aux.fq_info, aux.fq_info+1);
+    report_print(aux.read_info[0]);
 
     free(filter_opt);
-    free(aux.fq_info);
+    read_info_destroy(aux.read_info[0]);
+    free(aux.read_info);
     kseq_destroy(aux.ks);
     err_gzclose(fp); kclose(ko);
     return 0;
