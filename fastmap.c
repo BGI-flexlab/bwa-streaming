@@ -477,7 +477,7 @@ int main_mem(int argc, char *argv[])
 
     if(!filter_opt->skip_filter) {
 		if(rg_number < 0){
-			report_print(aux.read_info[i]);
+			report_print(aux.read_info[0]);
 		}else{
 			for(i=0; i<rg_number; i++){
 				report_print(aux.read_info[i]);

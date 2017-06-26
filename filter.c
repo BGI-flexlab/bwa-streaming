@@ -28,18 +28,20 @@ static void worker(void *data, int i, int tid)
 void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_t *seqs, read_info_t *read_info[])
 {
     extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
-    filter_worker_t w;
+    filter_worker_t *w;
     double ctime, rtime;
 
     ctime = cputime(); rtime = realtime();
-    w.filter_opt = opt;
-    w.seqs = seqs;
-    w.n_processed = n_processed;
-    w.read_info = read_info;  //fixme
+    w = calloc(1, sizeof(read_info_t));
+    w->filter_opt = opt;
+    w->seqs = seqs;
+    w->n_processed = n_processed;
+    w->read_info = read_info;  //fixme
 
-    kt_for(opt->n_threads, worker, &w, (opt->is_pe)? n>>1 : n); // generate alignment
+    kt_for(opt->n_threads, worker, w, (opt->is_pe)? n>>1 : n); // generate alignment
     if (bwa_verbose >= 3)
         fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
+    free(w);
 }
 
 // todo:  resize w.seqs
@@ -518,77 +520,15 @@ filter_opt_t *filter_opt_init()
     return o;
 }
 
-FqInfo *fq_info_init()
-{
-    int i, j;
-    FqInfo *o = calloc(1, sizeof(FqInfo));
-    o->max_quality_value = 41;
-
-//    o->info1->raw_base_num = 0;
-//    o->rawReadLength = 0;
-//    o->rawReadLength = 0;     //raw data 读长
-//    o->cleanReadLength = 0;   //clean data 读长
-//    o->rawTotalReadNum = 0;  //raw data read个数
-//    o->cleanTotalReadNum = 0;//clean data read 个数
-//    o->rawTotalBaseNum = 0;  //raw data total base number
-//    o->cleanTotalBaseNum = 0; //clean data total base number
-//    o->raw_base_A = 0;     //raw data base A number
-//    o->clean_base_A = 0;   //clean data base A number
-//    o->raw_base_C = 0;     //raw data base C number
-//    o->clean_base_C = 0; //clean data base C number
-//    o->raw_base_G = 0; //raw data base G number
-//    o->clean_base_G = 0; //clean data base G number
-//    o->raw_base_T = 0; //raw data base T number
-//    o->clean_base_T = 0; //clean data base T number
-//    o->raw_base_N = 0; //raw data base N number
-//    o->clean_base_N = 0; //clean data base N number
-//    o->raw_q20 = 0; //rawfq文件中碱基质量>=20的碱基总数
-//    o->clean_q20 = 0; //cleanfq文件中碱基质量>=20的碱基总数
-//    o->raw_q30 = 0; //rawfq文件中碱基质量>=30的碱基总数
-//    o->clean_q30 = 0; //cleanfq文件中碱基质量>=30的碱基总数
-//
-//    o->adapterNum = 0;  //the number of read which contain adapter in raw data
-//    o->nExceedNum = 0;  //the number of read which n rate was exceed in raw data
-//    o->lowQualNum = 0;  //low qualtiy read number in raw data
-//    o->lowMeanNum = 0;  //low mean quality read number in raw data
-//    o->smallInsertNum = 0;  //samll inert number in raw data
-//    o->polyANum = 0;    //polyA number in raw data
-//    o->short_length_n = 0;    //the read is too short
-//
-//    o->total_short_length_n = 0;
-//    o->totalAdapterNum = 0;
-//    o->totalNExceedNum = 0;
-//    o->totalLowQualNum = 0;
-//    o->totalLowMeanNum = 0;
-//    o->totalSmallInsertNum = 0;
-//    o->totalPolyANum = 0;
-//    o->totalCutAdaptorNum = 0;
-
-    for(i=0; i < MAX_LENGTH; i++){
-        o->clean_read_len_distribution[i] = 0;
-        for(j=0; j < 5; j++){
-            o->base[i][j] = 0;
-            o->clean_base[i][j] = 0;
-        }
-        for(j=0; j < 2; j++){
-            o->q20q30[i][j] = 0;
-            o->clean_q20q30[i][j] = 0;
-        }
-        for(j=0; j <= MAX_QUALITY; j++){
-            o->qual[i][j] = 0;
-            o->clean_qual[i][j] = 0;
-        }
-    }
-    return o;
-}
-
 read_info_t *read_info_init(int is_pe)
 {
-    int i, j;
     read_info_t *o = calloc(1, sizeof(read_info_t));
-    o->read1_info = fq_info_init();
-    if(is_pe)
-        o->read2_info = fq_info_init();
+    o->read1_info = calloc(1, sizeof(FqInfo));
+    o->read1_info->max_quality_value = 41;
+    if(is_pe) {
+        o->read2_info = calloc(1, sizeof(FqInfo));
+        o->read2_info->max_quality_value = 41;
+    }
     else
         o->read2_info = NULL;
 
@@ -662,6 +602,7 @@ void report_print(read_info_t *read_info)
 {
     err_printf(">%d\t%s\t#S\n", read_info->id, read_info->rg_id);
     err_fputs("#Total_statistical_information\t#S\n", stdout);
+    err_printf("%lu\t%lu\t",read_info->total_raw_read_num, read_info->total_clean_read_num);
     err_printf("%lu\t%lu\t%lu\t",read_info->total_short_length_num, read_info->total_n_exceed_num, read_info->total_low_qual_num);
     err_printf("%lu\t%lu\t%lu\t",read_info->total_low_mean_num, read_info->total_adapter_num, read_info->total_cut_adapter_num);
     err_printf("%lu\t%lu#S\n",read_info->total_small_insert_num, read_info->total_polyA_num);
