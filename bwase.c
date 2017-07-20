@@ -447,6 +447,7 @@ void bwa_print_sam1(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 		else err_printf("%dM", p->len);
 
 		// print mate coordinate
+		int ms = 0, me = 0;
 		if (mate && mate->type != BWA_TYPE_NO_MATCH) {
 			int m_seqid;
 			long long isize;
@@ -456,7 +457,16 @@ void bwa_print_sam1(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 			err_printf("\t%s\t", (seqid == m_seqid)? "=" : bns->anns[m_seqid].name);
 			isize = (seqid == m_seqid)? pos_5(mate) - pos_5(p) : 0;
 			if (p->type == BWA_TYPE_NO_MATCH) isize = 0;
-			err_printf("%d\t%lld\t", (int)(mate->pos - bns->anns[m_seqid].offset + 1), isize);
+			ms = (int)(mate->pos - bns->anns[m_seqid].offset + 1);
+			err_printf("%d\t%lld\t", ms, isize);
+
+			if (mate->cigar) {
+				me = ms + get_rlen(mate->n_cigar, mate->cigar) - 1;
+				if (__cigar_op(mate->cigar[0]) == 3) { ms -= __cigar_len(mate->cigar[0]); }
+				if (__cigar_op(mate->cigar[mate->n_cigar - 1]) == 3) { me += __cigar_len(mate->cigar[mate->n_cigar - 1]); }
+			} else{
+				me = ms + mate->len - 1;
+			}
 		} else if (mate) err_printf("\t=\t%d\t0\t", (int)(p->pos - bns->anns[seqid].offset + 1));
 		else err_printf("\t*\t0\t0\t");
 
@@ -469,14 +479,6 @@ void bwa_print_sam1(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 		} else err_printf("*");
 
         if (mate && mate->type != BWA_TYPE_NO_MATCH) {
-			int ms = (int)mate->pos + 1, me = (int)mate->pos;
-            if (mate->cigar) {
-				me += get_rlen(mate->n_cigar, mate->cigar);
-                if (__cigar_op(mate->cigar[0]) == 3) { ms -= __cigar_len(mate->cigar[0]); }
-                if (__cigar_op(mate->cigar[mate->n_cigar - 1]) == 3) { me += __cigar_len(mate->cigar[mate->n_cigar - 1]); }
-            } else{
-                me += mate->len;
-            }
             err_printf("\tMS:i:%d", ms);
             err_printf("\tME:i:%d", me);
         }
@@ -575,6 +577,7 @@ void bwa_print_sam2(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 		else err_printf("%dM", p->len);
 
 		// print mate coordinate
+		int ms = 0, me = 0;
 		if (mate && mate->type != BWA_TYPE_NO_MATCH) {
 			int m_seqid;
 			long long isize;
@@ -584,7 +587,16 @@ void bwa_print_sam2(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 			err_printf("\t%s\t", (seqid == m_seqid)? "=" : bns->anns[m_seqid].name);
 			isize = (seqid == m_seqid)? pos_5(mate) - pos_5(p) : 0;
 			if (p->type == BWA_TYPE_NO_MATCH) isize = 0;
-			err_printf("%d\t%lld\t", (int)(mate->pos - bns->anns[m_seqid].offset + 1), isize);
+			ms = (int)(mate->pos - bns->anns[m_seqid].offset + 1);
+			err_printf("%d\t%lld\t", ms, isize);
+
+			if (mate->cigar) {
+				me = ms + get_rlen(mate->n_cigar, mate->cigar) - 1;
+				if (__cigar_op(mate->cigar[0]) == 3) { ms -= __cigar_len(mate->cigar[0]); }
+				if (__cigar_op(mate->cigar[mate->n_cigar - 1]) == 3) { me += __cigar_len(mate->cigar[mate->n_cigar - 1]); }
+			} else{
+				me = ms + mate->len - 1;
+			}
 		} else if (mate) err_printf("\t=\t%d\t0\t", (int)(p->pos - bns->anns[seqid].offset + 1));
 		else err_printf("\t*\t0\t0\t");
 
@@ -597,14 +609,6 @@ void bwa_print_sam2(const bntseq_t *bns, bwa_seq_t *p, const bwa_seq_t *mate, in
 		} else err_printf("*");
 
 		if (mate && mate->type != BWA_TYPE_NO_MATCH) {
-			int ms = (int)mate->pos + 1, me = (int)mate->pos;
-			if (mate->cigar) {
-				me += get_rlen(mate->n_cigar, mate->cigar);
-				if (__cigar_op(mate->cigar[0]) == 3) { ms -= __cigar_len(mate->cigar[0]); }
-				if (__cigar_op(mate->cigar[mate->n_cigar - 1]) == 3) { me += __cigar_len(mate->cigar[mate->n_cigar - 1]); }
-			} else{
-				me += mate->len;
-			}
 			err_printf("\tMS:i:%d", ms);
 			err_printf("\tME:i:%d", me);
 		}
