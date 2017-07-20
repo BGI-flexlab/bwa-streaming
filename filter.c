@@ -9,6 +9,7 @@
 #include "utils.h"
 #include "bwa.h"
 extern int rg_number;
+
 //// filter step (SOAPnuke)
 static void worker(void *data, int i, int tid)
 {
@@ -18,7 +19,7 @@ static void worker(void *data, int i, int tid)
 //        w->is_clean = statistics_se(w->seqs[i<<1|0],w->seqs[i<<1|1], w->filter_opt, w->aux[tid]);
     } else{
         if (bwa_verbose >= 4) printf("=====> Processing read '%s'/1/2 <=====\n", w->seqs[i<<1|0].name);
-        int is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->read_info);
+        int is_clean = statistics_pe(&w->seqs[i<<1|0], &w->seqs[i<<1|1], w->filter_opt, w->read_info[tid]);
         w->seqs[i<<1|0].filter = !is_clean;
         w->seqs[i<<1|1].filter = !is_clean;
         if (bwa_verbose >= 4) printf("=====> Processing read filter stat: '%d' <=====\n", is_clean);
@@ -30,15 +31,46 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
     extern void kt_for(int n_threads, void (*func)(void*,int,int), void *data, int n);
     filter_worker_t *w;
     double ctime, rtime;
+    int i, j;
 
     ctime = cputime(); rtime = realtime();
     w = calloc(1, sizeof(read_info_t));
     w->filter_opt = opt;
     w->seqs = seqs;
     w->n_processed = n_processed;
-    w->read_info = read_info;  //fixme
+//    w->read_info = read_info;  //fixme
+
+    w->read_info = malloc(opt->n_threads * sizeof(read_info_t**));
+    for (i = 0; i < opt->n_threads; ++i) {
+        if(rg_number < 0){
+            w->read_info[i] = (read_info_t**)malloc(sizeof(read_info_t *));
+            w->read_info[i][0] = read_info_init(opt->is_pe);
+        }else{
+            w->read_info[i] = (read_info_t**)malloc(rg_number*sizeof(read_info_t *));
+            for(j=0; j<rg_number; j++){
+                w->read_info[i][j] = read_info_init(opt->is_pe);
+            }
+        }
+    }
 
     kt_for(opt->n_threads, worker, w, (opt->is_pe)? n>>1 : n); // generate alignment
+
+    for (i = 0; i < opt->n_threads; ++i) {
+        if(rg_number < 0){
+            merge_report(read_info[0], w->read_info[i][0]);
+            free(w->read_info[i]);
+            read_info_destroy(w->read_info[i][0]);
+        }else{
+            for(j=0; j<rg_number; j++){
+                merge_report(read_info[j], w->read_info[i][j]);
+                free(w->read_info[i]);
+                read_info_destroy(w->read_info[i][j]);
+            }
+        }
+    }
+
+
+
     if (bwa_verbose >= 3)
         fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
     free(w);
@@ -244,7 +276,7 @@ void calculate_base_distribution(bseq1_t *read, FqInfo *info)
             default:break;
         }
 
-        qual = read->qual[i];
+        qual = read->qual[i] - 33;
         ++info->clean_qual[i][qual];
 
         if (qual >= 20)
@@ -496,7 +528,7 @@ filter_opt_t *filter_opt_init()
     int i;
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
-    o->skip_filter = 0;
+    o->skip_filter = 1;
     o->is_phred64 = 0;
     o->is_pe = 1;
     o->n_threads = 1;
@@ -533,6 +565,73 @@ read_info_t *read_info_init(int is_pe)
         o->read2_info = NULL;
 
     return o;
+}
+
+void merge_fq_info(FqInfo *fqinfo, FqInfo *ptr) {
+    int i, j;
+
+    fqinfo->max_quality_value = fqinfo->max_quality_value > ptr->max_quality_value ? fqinfo->max_quality_value : ptr->max_quality_value;
+    fqinfo->max_raw_read_len = fqinfo->max_raw_read_len > ptr->max_raw_read_len ? fqinfo->max_raw_read_len : ptr->max_raw_read_len;
+    fqinfo->max_clean_read_len = fqinfo->max_clean_read_len > ptr->max_clean_read_len ? fqinfo->max_clean_read_len : ptr->max_clean_read_len;
+
+    fqinfo->raw_base_num += ptr->raw_base_num;
+    fqinfo->clean_base_num += ptr->clean_base_num;
+    fqinfo->raw_base_A += ptr->raw_base_A;
+    fqinfo->clean_base_A += ptr->clean_base_A;
+    fqinfo->raw_base_C += ptr->raw_base_C;
+    fqinfo->clean_base_C += ptr->clean_base_C;
+    fqinfo->raw_base_G += ptr->raw_base_G;
+    fqinfo->clean_base_G += ptr->clean_base_G;
+    fqinfo->raw_base_T += ptr->raw_base_T;
+    fqinfo->clean_base_T += ptr->clean_base_T;
+    fqinfo->raw_base_N += ptr->raw_base_N;
+    fqinfo->clean_base_N += ptr->clean_base_N;
+    fqinfo->raw_q20 += ptr->raw_q20;
+    fqinfo->clean_q20 += ptr->clean_q20;
+    fqinfo->raw_q30 += ptr->raw_q30;
+    fqinfo->clean_q30 += ptr->clean_q30;
+
+    fqinfo->adapter_num += ptr->adapter_num;
+    fqinfo->n_exceed_num += ptr->n_exceed_num;
+    fqinfo->low_qual_num += ptr->low_qual_num;
+    fqinfo->low_mean_num += ptr->low_mean_num;
+    fqinfo->small_insert_num += ptr->small_insert_num;
+    fqinfo->polyA_num += ptr->polyA_num;
+    fqinfo->short_length_n += ptr->short_length_n;
+
+    for(i=0; i < MAX_LENGTH; i++){
+        fqinfo->clean_read_len_distribution[i] += fqinfo->clean_read_len_distribution[i];
+        for(j=0; j < 5; j++){
+            fqinfo->base[i][j] += ptr->base[i][j];
+            fqinfo->clean_base[i][j] += ptr->clean_base[i][j];
+        }
+        for(j=0; j < 2; j++){
+            fqinfo->q20q30[i][j] += ptr->q20q30[i][j];
+            fqinfo->clean_q20q30[i][j] += ptr->clean_q20q30[i][j];
+        }
+        for(j=0; j <= MAX_QUALITY; j++){
+            fqinfo->qual[i][j] += ptr->qual[i][j];
+            fqinfo->clean_qual[i][j] += ptr->clean_qual[i][j];
+        }
+    }
+}
+
+void merge_report(read_info_t *info, read_info_t *ptr) {
+    info->total_raw_read_num += ptr->total_raw_read_num;
+    info->total_clean_read_num += ptr->total_clean_read_num;
+    info->total_short_length_num += ptr->total_short_length_num;
+    info->total_n_exceed_num += ptr->total_n_exceed_num;
+    info->total_low_qual_num += ptr->total_low_qual_num;
+    info->total_low_mean_num += ptr->total_low_mean_num;
+    info->total_adapter_num += ptr->total_adapter_num;
+    info->total_cut_adapter_num += ptr->total_cut_adapter_num;
+    info->total_small_insert_num += ptr->total_small_insert_num;
+    info->total_polyA_num += ptr->total_polyA_num;
+
+    merge_fq_info(info->read1_info, ptr->read1_info);
+    if(NULL != info->read2_info)
+        merge_fq_info(info->read2_info, ptr->read2_info);
+
 }
 
 

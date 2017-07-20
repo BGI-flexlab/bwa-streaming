@@ -174,7 +174,7 @@ int main_mem(int argc, char *argv[])
             break;
 
         if(c == 0) {
-            if(strcmp(long_options[option_index].name, "skip_filter")==0) filter_opt->skip_filter = 1;
+            if(strcmp(long_options[option_index].name, "enable_filter")==0) filter_opt->skip_filter = 0;
 			else if(strcmp(long_options[option_index].name, "adapter1")==0) filter_opt->adp1 = optarg;
             else if(strcmp(long_options[option_index].name, "adapter2")==0) filter_opt->adp2 = optarg;
             else if(strcmp(long_options[option_index].name, "misMatch")==0) filter_opt->misMatch = atoi(optarg);
@@ -356,7 +356,7 @@ int main_mem(int argc, char *argv[])
 		fprintf(stderr, "                     (4 sigma from the mean if absent) and min of the insert size distribution.\n");
 		fprintf(stderr, "                     FR orientation only. [inferred]\n");
 		fprintf(stderr, "\nFilter options:\n\n");
-		fprintf(stderr, "       --skip_filter          skip filter step [off]\n");
+		fprintf(stderr, "       --enable_filter        enable filter function [off]\n");
 		fprintf(stderr, "       --adapter1    STR      3' adapter sequence of fq1 file  [null]\n");
 		fprintf(stderr, "       --adapter2    STR      5' adapter sequence of fq2 file (only for PE reads)  [null]\n");
 		fprintf(stderr, "       --misMatch    INT      the max mismatch number when match the adapter [1]\n");
@@ -433,8 +433,8 @@ int main_mem(int argc, char *argv[])
 	aux.ks = kseq_init(fp);
 	if (optind + 2 < argc) {
 		if (opt->flag&MEM_F_PE) {
-			if (bwa_verbose >= 2)
-				fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
+			//if (bwa_verbose >= 2)
+				//fprintf(stderr, "[W::%s] when '-p' is in use, the second query file is ignored.\n", __func__);
 		} else {
 			ko2 = kopen(argv[optind + 2], &fd2);
 			if (ko2 == 0) {

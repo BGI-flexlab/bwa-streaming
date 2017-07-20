@@ -118,7 +118,7 @@ typedef struct {
     const filter_opt_t *filter_opt;
     bseq1_t *seqs;
     int64_t n_processed;
-    read_info_t **read_info;
+    read_info_t ***read_info;
 } filter_worker_t;
 
 
@@ -160,6 +160,8 @@ int adapter_align(bseq1_t *read, const char *adapter, const filter_opt_t *opt) ;
 void calculate_base_distribution(bseq1_t* read, FqInfo *info);
 
 void report_print(read_info_t *read_info);
+
+void merge_report(read_info_t *info, read_info_t *ptr);
 
 
 #endif //BWA_FILTER_H
