@@ -58,14 +58,14 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
     for (i = 0; i < opt->n_threads; ++i) {
         if(rg_number < 0){
             merge_report(read_info[0], w->read_info[i][0]);
-            free(w->read_info[i]);
             read_info_destroy(w->read_info[i][0]);
+            free(w->read_info[i]);
         }else{
             for(j=0; j<rg_number; j++){
                 merge_report(read_info[j], w->read_info[i][j]);
-                free(w->read_info[i]);
                 read_info_destroy(w->read_info[i][j]);
             }
+            free(w->read_info[i]);
         }
     }
 

@@ -39,7 +39,6 @@ typedef struct {
 static void *worker(void *data)
 {
 	thread_aux_t *d = (thread_aux_t*)data;
-    //bwa_filter(d->tid, d->bwt, d->n_seqs, d->seqs, d->opt);
 	bwa_cal_sa_reg_gap2(d->tid, d->bwt, d->n_seqs, d->seqs, d->opt);
 	return 0;
 }
@@ -88,11 +87,11 @@ int split_sample_list(char *str,char *delim, smaple_list *sl[])
 		sl[id]->rg_id = calloc(q - p + 1, 1);
 		for (q = p, r = sl[id]->rg_id; *q && *q != '\t' && *q != '\n'; ++q)
 			*r++ = *q;
+	    return 0;
 	} else {
 		return -1;
 	}
 	//fprintf(stderr, "ID:%d\tRG:%s\n", id, sl[id]->rg);
-	return i;
 }
 
 int read_sample_list(char * file, smaple_list *sl[]) 
@@ -111,7 +110,6 @@ int read_sample_list(char * file, smaple_list *sl[])
 	{
 		if(len == 1)
 			continue;
-		
 		if(split_sample_list(line, "\t", sl) == -1)
 		{
 			fprintf(stderr, "wrong line:%s", line);
@@ -119,7 +117,6 @@ int read_sample_list(char * file, smaple_list *sl[])
 		}
 		i++;
 	}
-	
 	close(list_fd);
 	return i;
 }

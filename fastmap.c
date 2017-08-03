@@ -148,7 +148,7 @@ int main_mem(int argc, char *argv[])
 	memset(&opt0, 0, sizeof(mem_opt_t));
 
 	static struct option long_options[] = {
-			{"skip_filter", no_argument, 0, 0},
+			{"enable_filter", no_argument, 0, 0},
 			{"adapter1", required_argument, 0, 0},
 			{"adapter2", required_argument, 0, 0},
 			{"misMatch", required_argument, 0, 0},
