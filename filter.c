@@ -662,9 +662,8 @@ void print_fq_info(FqInfo *fqInfo)
         {
             err_printf("\t%lu", fqInfo->base[i][j]);
         }
-        err_fputs("#S\n", stdout);
 
-        err_printf("%lu", fqInfo->clean_base[i][0]);
+        err_printf("\t%lu", fqInfo->clean_base[i][0]);
         for (j=1; j<5; j++)
         {
             err_printf("\t%lu", fqInfo->clean_base[i][j]);
