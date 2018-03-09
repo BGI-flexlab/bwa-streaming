@@ -68,7 +68,9 @@ static void *process(void *shared, int step, void *_data)
 	} else if (step == 1) {
         if(!aux->filter_opt->skip_filter){
 		    soapnuke_filter(aux->filter_opt, aux->n_processed, data->n_seqs, data->seqs, aux->read_info);
-		    remove_bad_reads(data);
+            if(!aux->filter_opt->hold_reads){
+                remove_bad_reads(data);
+            }
         }
 
 		const mem_opt_t *opt = aux->opt;
@@ -149,6 +151,7 @@ int main_mem(int argc, char *argv[])
 
 	static struct option long_options[] = {
 			{"enable_filter", no_argument, 0, 0},
+			{"hold_reads", no_argument, 0, 0},
 			{"adapter1", required_argument, 0, 0},
 			{"adapter2", required_argument, 0, 0},
 			{"misMatch", required_argument, 0, 0},
@@ -175,6 +178,7 @@ int main_mem(int argc, char *argv[])
 
         if(c == 0) {
             if(strcmp(long_options[option_index].name, "enable_filter")==0) filter_opt->skip_filter = 0;
+            if(strcmp(long_options[option_index].name, "hold_reads")==0) filter_opt->hold_reads = 1;
 			else if(strcmp(long_options[option_index].name, "adapter1")==0) filter_opt->adp1 = optarg;
             else if(strcmp(long_options[option_index].name, "adapter2")==0) filter_opt->adp2 = optarg;
             else if(strcmp(long_options[option_index].name, "misMatch")==0) filter_opt->misMatch = atoi(optarg);
@@ -357,6 +361,7 @@ int main_mem(int argc, char *argv[])
 		fprintf(stderr, "                     FR orientation only. [inferred]\n");
 		fprintf(stderr, "\nFilter options:\n\n");
 		fprintf(stderr, "       --enable_filter        enable filter function [off]\n");
+		fprintf(stderr, "       --hold_reads           don't remove bad reads [off]\n");
 		fprintf(stderr, "       --adapter1    STR      3' adapter sequence of fq1 file  [null]\n");
 		fprintf(stderr, "       --adapter2    STR      5' adapter sequence of fq2 file (only for PE reads)  [null]\n");
 		fprintf(stderr, "       --misMatch    INT      the max mismatch number when match the adapter [1]\n");
@@ -448,9 +453,9 @@ int main_mem(int argc, char *argv[])
 	}
 	/*******lisk******/
     if(opt->sample_list != NULL) {
-        sl = (smaple_list**)malloc(1000*sizeof(smaple_list *));
+        sl = (smaple_list**)malloc(MAX_LANE_NUM*sizeof(smaple_list *));
         int s;
-        for (s =0; s < 1000; s++){
+        for (s =0; s < MAX_LANE_NUM; s++){
             sl[s] = NULL;
         }
         rg_number = read_sample_list(opt->sample_list, sl);
@@ -458,16 +463,20 @@ int main_mem(int argc, char *argv[])
     }
     if(rg_number < 0){
         bwa_print_sam_hdr(aux.idx->bns, hdr_line);
-		aux.read_info = (read_info_t**)malloc(sizeof(read_info_t *));
-		aux.read_info[0] = read_info_init(filter_opt->is_pe);
+        if(!filter_opt->skip_filter) {
+            aux.read_info = (read_info_t **) malloc(sizeof(read_info_t *));
+            aux.read_info[0] = read_info_init(filter_opt->is_pe);
+        }
 	}else{
         bwa_print_sam_hdr2(aux.idx->bns, sl, rg_number);
-		aux.read_info = (read_info_t**)malloc(rg_number*sizeof(read_info_t *));
-		for(i=0; i<rg_number; i++){
-			aux.read_info[i] = read_info_init(filter_opt->is_pe);
-			aux.read_info[i]->id = i;
-			aux.read_info[i]->rg_id = sl[i]->rg_id;
-		}
+        if(!filter_opt->skip_filter) {
+            aux.read_info = (read_info_t **) malloc(rg_number * sizeof(read_info_t *));
+            for (i = 0; i < rg_number; i++) {
+                aux.read_info[i] = read_info_init(filter_opt->is_pe);
+                aux.read_info[i]->id = i;
+                aux.read_info[i]->rg_id = sl[i]->rg_id;
+            }
+        }
 	}
 
 	aux.actual_chunk_size = fixed_chunk_size > 0? fixed_chunk_size : opt->chunk_size * opt->n_threads;
@@ -487,7 +496,7 @@ int main_mem(int argc, char *argv[])
 
 	free(hdr_line);
 	free(opt);
-	free(filter_opt);
+    filter_opt_destroy(filter_opt);
 	if(rg_number < 0){
 		read_info_destroy(aux.read_info[0]);
 		free(aux.read_info);
@@ -504,6 +513,17 @@ int main_mem(int argc, char *argv[])
 		kseq_destroy(aux.ks2);
 		err_gzclose(fp2); kclose(ko2);
 	}
+    if(sl != NULL){
+        int s;
+        for (s =0; s < MAX_LANE_NUM; s++){
+            if(sl[s] != NULL){
+                free(sl[s]->rg_id);
+                free(sl[s]->rg);
+                free(sl[s]);
+            }
+        }
+        free(sl);
+    }
 	return 0;
 }
 

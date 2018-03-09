@@ -23,6 +23,8 @@
 #define b128_eq(a, b) ((a).x == (b).x && (a).y == (b).y)
 #define b128_hash(a) ((uint32_t)(a).x)
 #include "khash.h"
+#include "bwa.h"
+
 KHASH_INIT(b128, pair64_t, poslist_t, 1, b128_hash, b128_eq)
 extern int g_log_n[256]; // in bwase.c
 static kh_b128_t *g_hash;
@@ -87,11 +89,11 @@ int split_sample_list(char *str,char *delim, smaple_list *sl[])
 		sl[id]->rg_id = calloc(q - p + 1, 1);
 		for (q = p, r = sl[id]->rg_id; *q && *q != '\t' && *q != '\n'; ++q)
 			*r++ = *q;
+//		fprintf(stderr, "ID:%d\tRG:%s\tID:%s\n", id, sl[id]->rg, sl[id]->rg_id);
 	    return 0;
 	} else {
 		return -1;
 	}
-	//fprintf(stderr, "ID:%d\tRG:%s\n", id, sl[id]->rg);
 }
 
 int read_sample_list(char * file, smaple_list *sl[]) 

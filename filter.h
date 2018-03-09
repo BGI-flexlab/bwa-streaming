@@ -9,7 +9,7 @@
 #include "bwtaln.h"
 #include "bwamem.h"
 
-#define MAX_LENGTH 1000
+#define MAX_LENGTH 300
 #define MAX_QUALITY 50
 
 //统计read截断了两端后的信息
@@ -28,6 +28,7 @@ typedef struct
 
 typedef struct {
     int skip_filter;
+    int hold_reads;
     int is_phred64;
     int is_pe;
     int n_threads;
@@ -129,6 +130,7 @@ typedef struct {
 } ktp_data_t;
 
 filter_opt_t* filter_opt_init();
+void filter_opt_destroy(filter_opt_t *o);
 
 read_info_t *read_info_init(int is_pe);
 void read_info_destroy(read_info_t *read_indo);

@@ -25,7 +25,6 @@ set(LIBBWA_SOURCE_FILES
 
 set(MAIN_SOURCE_FILES
         bamlite.c
-        bwa.c
         bwape.c
         bwase.c
         bwaseqio.c

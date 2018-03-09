@@ -17,6 +17,8 @@
 #define BWTALGO_BWTSW 2
 #define BWTALGO_IS    3
 
+#define MAX_LANE_NUM 2000
+
 typedef struct {
 	bwt_t    *bwt; // FM-index
 	bntseq_t *bns; // information on the reference sequences

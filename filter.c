@@ -68,8 +68,7 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
             free(w->read_info[i]);
         }
     }
-
-
+    free(w->read_info);
 
     if (bwa_verbose >= 3)
         fprintf(stderr, "[M::%s] Processed %d reads in %.3f CPU sec, %.3f real sec\n", __func__, n, cputime() - ctime, realtime() - rtime);
@@ -80,16 +79,19 @@ void soapnuke_filter(const filter_opt_t *opt, int64_t n_processed, int n, bseq1_
 void remove_bad_reads(ktp_data_t *data)
 {
     int i, index;
-    for(i=0, index=-1; i < data->n_seqs;i++){
+    bseq1_t* filter_seqs=malloc(data->n_seqs*sizeof(bseq1_t));
+    for(i=0, index=0; i < data->n_seqs; i++){
         if(!data->seqs[i].filter){
-            index ++;
-            if(i != index){
-                memcpy(data->seqs + index, data->seqs + i, sizeof(bseq1_t));
-            }
+            filter_seqs[index] = data->seqs[i];
+            index++;
+        } else{
+            free(data->seqs[i].name); free(data->seqs[i].comment);
+            free(data->seqs[i].seq); free(data->seqs[i].qual);
         }
     }
-    data->n_seqs = index + 1;
-    realloc(data->seqs, data->n_seqs* sizeof(bseq1_t));
+    free(data->seqs);
+    data->n_seqs = index;
+    data->seqs = filter_seqs;
 }
 
 int statistics_pe(bseq1_t *read1, bseq1_t *read2, const filter_opt_t *opt, read_info_t *read_info[])
@@ -425,11 +427,21 @@ void seq_stat(bseq1_t *read, const filter_opt_t *opt, int head_trim_n, int tail_
         read->seq[0] = '\0';
     }else{
         //截断read的两端
-        strncpy(read->seq,read->seq+head_trim_n , (size_t) read->l_seq);
-        read->seq[read->l_seq] = '\0';
+        char* seq_tmp = strdup(read->seq+head_trim_n);
+        seq_tmp[read->l_seq] = '\0';
+        free(read->seq);
+        read->seq = seq_tmp;
 
-        strncpy(read->qual,read->qual+head_trim_n , (size_t) read->l_seq);
-        read->qual[read->l_seq] = '\0';
+        char* qual_tmp = strdup(read->qual+head_trim_n);
+        seq_tmp[read->l_seq] = '\0';
+        free(read->qual);
+        read->qual = qual_tmp;
+
+//        strncpy(read->seq,read->seq+head_trim_n , (size_t) read->l_seq);
+//        read->seq[read->l_seq] = '\0';
+
+//        strncpy(read->qual,read->qual+head_trim_n , (size_t) read->l_seq);
+//        read->qual[read->l_seq] = '\0';
     }
 
     si->nExceed = (si->n >= read->l_seq * opt->nRate);
@@ -529,6 +541,7 @@ filter_opt_t *filter_opt_init()
     filter_opt_t *o;
     o = calloc(1, sizeof(filter_opt_t));
     o->skip_filter = 1;
+    o->hold_reads = 0;
     o->is_phred64 = 0;
     o->is_pe = 1;
     o->n_threads = 1;
@@ -550,6 +563,17 @@ filter_opt_t *filter_opt_init()
         o->trim[i] = 0;
     }
     return o;
+}
+
+void filter_opt_destroy(filter_opt_t *o)
+{
+    if(NULL != o->adp1)
+            free(o->adp1);
+    if(NULL != o->adp2)
+        free(o->adp2);
+    if(NULL != o->tile)
+        free(o->tile);
+    free(o);
 }
 
 read_info_t *read_info_init(int is_pe)
