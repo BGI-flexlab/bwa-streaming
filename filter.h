@@ -9,7 +9,7 @@
 #include "bwtaln.h"
 #include "bwamem.h"
 
-#define MAX_LENGTH 300
+#define MAX_LENGTH 500
 #define MAX_QUALITY 50
 
 //统计read截断了两端后的信息

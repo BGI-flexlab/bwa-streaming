@@ -492,20 +492,20 @@ int main_mem(int argc, char *argv[])
 				report_print(aux.read_info[i]);
 			}
 		}
+		if(rg_number == 1){
+			read_info_destroy(aux.read_info[0]);
+			free(aux.read_info);
+		}else{
+			for(i=0; i<rg_number; i++){
+				read_info_destroy(aux.read_info[i]);
+			}
+			free(aux.read_info);
+		}
     }
 
 	free(hdr_line);
 	free(opt);
     filter_opt_destroy(filter_opt);
-	if(rg_number < 0){
-		read_info_destroy(aux.read_info[0]);
-		free(aux.read_info);
-	}else{
-		for(i=0; i<rg_number; i++){
-			read_info_destroy(aux.read_info[i]);
-		}
-		free(aux.read_info);
-	}
 	bwa_idx_destroy(aux.idx);
 	kseq_destroy(aux.ks);
 	err_gzclose(fp); kclose(ko);
