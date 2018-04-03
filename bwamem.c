@@ -899,7 +899,7 @@ void mem_aln2sam(const mem_opt_t *opt, const bntseq_t *bns, kstring_t *str, bseq
 		} else kputc('*', str);
 	}
 
-    if (m->n_cigar){
+    if (m != NULL && m->n_cigar){
         int64_t ms = m->pos + 1, me=m->pos + get_rlen(m->n_cigar, m->cigar);
         if ((m->cigar[0]&0xf) == 4 || (m->cigar[0]&0xf) == 3){ms -= m->cigar[0]>>4;}
         if ((m->cigar[m->n_cigar-1]&0xf) == 4 || (m->cigar[m->n_cigar-1]&0xf) == 3){me += m->cigar[m->n_cigar-1]>>4;}
