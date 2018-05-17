@@ -156,7 +156,7 @@ int main_mem(int argc, char *argv[])
 			{"adapter2", required_argument, 0, 0},
 			{"misMatch", required_argument, 0, 0},
 			{"matchRatio", required_argument, 0, 0},
-			{"cutAdaptor", required_argument, 0, 0},
+			{"cutAdaptor", no_argument, 0, 0},
 			{"lowQual", required_argument, 0, 0},
 			{"qualRate", required_argument, 0, 0},
 			{"nRate", required_argument, 0, 0},
@@ -505,7 +505,7 @@ int main_mem(int argc, char *argv[])
 
 	free(hdr_line);
 	free(opt);
-    filter_opt_destroy(filter_opt);
+//    filter_opt_destroy(filter_opt);
 	bwa_idx_destroy(aux.idx);
 	kseq_destroy(aux.ks);
 	err_gzclose(fp); kclose(ko);
