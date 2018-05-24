@@ -549,7 +549,7 @@ filter_opt_t *filter_opt_init()
     o->adp2 = NULL;
     o->tile = NULL;
     o->misMatch = 1;
-    o->cutAdapter = 1;
+    o->cutAdapter = 0;
     o->matchRatio = 0.5;
     o->lowQual = 5;
     o->qualRate = 0.5;
